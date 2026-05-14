@@ -20,23 +20,23 @@ $(TEST_BIN): $(SRC) $(TEST_SRC)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(SRC) $(TEST_SRC) -lm -lz -o $(TEST_BIN)
 
 # Run pngsuite sweep:
-#   - Files NOT in corrupt/  must decode successfully  (pass = success)
-#   - Files inside  corrupt/ must be rejected by decoder (pass = failure)
+#   PASS  - valid file decoded successfully
+#   FAIL  - valid file failed to decode         (counts toward exit failure)
+#   XFAIL - corrupt file rejected as expected   (excluded from fail count)
+#   XPASS - corrupt file decoded unexpectedly   (counts toward exit failure)
 pngsuite: $(EXAMPLE_BIN)
-	@pass=0; fail=0; \
+	@pass=0; fail=0; xfail=0; xpass=0; \
 	for f in $$(find $(PNGSUITE_DIR) -name "*.png" ! -path "*/corrupt/*"); do \
 	  if timeout 8s $(EXAMPLE_BIN) "$$f" >/dev/null 2>&1; then pass=$$((pass+1)); \
-	  else echo "DECODE FAIL (should succeed): $$f"; fail=$$((fail+1)); fi; \
+	  else echo "FAIL: $$f"; fail=$$((fail+1)); fi; \
 	done; \
-	corrupt_pass=0; corrupt_fail=0; \
 	for f in $(PNGSUITE_DIR)/corrupt/*.png; do \
 	  if timeout 8s $(EXAMPLE_BIN) "$$f" >/dev/null 2>&1; then \
-	    echo "UNEXPECTED SUCCESS (should fail): $$f"; corrupt_fail=$$((corrupt_fail+1)); \
-	  else corrupt_pass=$$((corrupt_pass+1)); fi; \
+	    echo "XPASS: $$f"; xpass=$$((xpass+1)); \
+	  else xfail=$$((xfail+1)); fi; \
 	done; \
-	echo "Valid PNGs:   $$pass pass, $$fail fail"; \
-	echo "Corrupt PNGs: $$corrupt_pass correctly rejected, $$corrupt_fail wrongly accepted"; \
-	if [ $$fail -ne 0 ] || [ $$corrupt_fail -ne 0 ]; then exit 1; fi
+	echo "$$pass passed, $$fail failed, $$xfail xfailed, $$xpass xpassed"; \
+	if [ $$fail -ne 0 ] || [ $$xpass -ne 0 ]; then exit 1; fi
 
 clean:
 	rm -f $(TEST_BIN)
