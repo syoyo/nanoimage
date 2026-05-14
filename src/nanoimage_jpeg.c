@@ -30,6 +30,7 @@ static const uint8_t k_zigzag[64] = {
    12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13,  6,  7, 14, 21, 28,
    35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51,
    58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63};
+static const double k_pi = 3.14159265358979323846;
 
 static void ni_set_error(char *err, size_t cap, const char *fmt, ...) {
   va_list args;
@@ -191,10 +192,8 @@ static void ni_idct_block(const int16_t in[64], uint8_t out[64]) {
           const double cu = (u == 0) ? (1.0 / sqrt(2.0)) : 1.0;
           const double cv = (v == 0) ? (1.0 / sqrt(2.0)) : 1.0;
           const double basis =
-              cos(((2.0 * x + 1.0) * (double)u * 3.14159265358979323846) /
-                  16.0) *
-              cos(((2.0 * y + 1.0) * (double)v * 3.14159265358979323846) /
-                  16.0);
+              cos(((2.0 * x + 1.0) * (double)u * k_pi) / 16.0) *
+              cos(((2.0 * y + 1.0) * (double)v * k_pi) / 16.0);
           sum += cu * cv * (double)in[v * 8 + u] * basis;
         }
       }
