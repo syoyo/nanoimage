@@ -3,7 +3,18 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
+
+typedef void *(*ni_malloc_callback)(size_t size, void *user_data);
+typedef void *(*ni_realloc_callback)(void *ptr, size_t size, void *user_data);
+typedef void (*ni_free_callback)(void *ptr, void *user_data);
+
+typedef struct {
+  ni_malloc_callback malloc_fn;
+  ni_realloc_callback realloc_fn;
+  ni_free_callback free_fn;
+  void *user_data;
+  size_t max_allocation;
+} ni_allocator;
 
 typedef struct {
   uint32_t width;
@@ -14,17 +25,8 @@ typedef struct {
   uint8_t *data;
 } ni_image;
 
-static inline void ni_image_free(ni_image *image) {
-  if (image == NULL) {
-    return;
-  }
-  free(image->data);
-  image->data = NULL;
-  image->data_size = 0;
-  image->width = 0;
-  image->height = 0;
-  image->channels = 0;
-  image->bit_depth = 0;
-}
+void ni_set_allocator(const ni_allocator *allocator);
+void ni_reset_allocator(void);
+void ni_image_free(ni_image *image);
 
 #endif
