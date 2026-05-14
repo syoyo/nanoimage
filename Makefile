@@ -1,6 +1,6 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -pedantic
-CPPFLAGS ?= -Iinclude
+CPPFLAGS ?= -Iinclude -Ithird_party
 
 SRC = src/nanoimage_zlib.c src/nanoimage_png.c src/nanoimage_jpeg.c
 TEST_SRC = tests/test_nanoimage.c
