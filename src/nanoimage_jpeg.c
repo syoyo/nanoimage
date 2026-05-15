@@ -52,16 +52,18 @@ static uint16_t ni_read_u16be(const uint8_t *p) {
 static int ni_build_huffman(ni_huff_table *tbl) {
   int i;
   int code = 0;
-  int k = 0;
+  unsigned k = 0;
+  unsigned total_count = 0;
 
   tbl->value_count = 0;
   for (i = 0; i < 16; i++) {
-    tbl->value_count = (uint8_t)(tbl->value_count + tbl->bits[i]);
+    total_count += tbl->bits[i];
   }
 
-  if (tbl->value_count == 0u) {
+  if ((total_count == 0u) || (total_count > 256u)) {
     return 0;
   }
+  tbl->value_count = (uint16_t)total_count;
 
   for (i = 1; i <= 16; i++) {
     if (tbl->bits[i - 1] == 0u) {
@@ -654,6 +656,11 @@ int ni_load_jpeg_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
             count += tbl->bits[i];
           }
           p += 16u;
+
+          if ((count == 0u) || (count > 256u)) {
+            ni_set_error(err, err_capacity, "invalid DHT symbol count");
+            goto fail;
+          }
 
           if ((p + count) > seg_data_len) {
             ni_set_error(err, err_capacity, "truncated DHT values");
