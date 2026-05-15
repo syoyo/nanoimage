@@ -4,6 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef NI_DEFAULT_MAX_ALLOCATION
+#define NI_DEFAULT_MAX_ALLOCATION ((size_t)1024u * 1024u * 1024u)
+#endif
+
 typedef void *(*ni_malloc_callback)(size_t size, void *user_data);
 typedef void *(*ni_realloc_callback)(void *ptr, size_t size, void *user_data);
 typedef void (*ni_free_callback)(void *ptr, void *user_data);

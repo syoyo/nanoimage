@@ -1,5 +1,6 @@
 #include "nanoimage_zlib.h"
 
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -33,6 +34,10 @@ static int ni_zlib_inflate_impl(const uint8_t *input, size_t input_len,
 
   if (input_len == 0u) {
     ni_set_error(err, err_capacity, "empty deflate input");
+    return 0;
+  }
+  if ((input_len > (size_t)UINT_MAX) || (output_len > (size_t)UINT_MAX)) {
+    ni_set_error(err, err_capacity, "zlib buffer size exceeds 32-bit limit");
     return 0;
   }
 

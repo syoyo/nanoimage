@@ -146,12 +146,18 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
   size_t output_size = 0u;
   size_t idat_size = 0u;
   size_t raw_size = 0u;
+  size_t max_rowbytes = 0u;
   size_t off;
   int saw_ihdr = 0;
+  int saw_plte = 0;
+  int saw_trns = 0;
+  int saw_idat = 0;
   int saw_iend = 0;
   uint8_t *idat = NULL;
   uint8_t *raw = NULL;
   uint8_t *pixels = NULL;
+  uint8_t *row_buf_a = NULL;
+  uint8_t *row_buf_b = NULL;
   uint8_t *palette = NULL;
   size_t palette_entries = 0u;
   uint8_t *palette_alpha = NULL;
@@ -175,17 +181,23 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
     const uint32_t chunk_len = ni_read_u32be(bytes + off);
     const uint8_t *chunk_type = bytes + off + 4u;
     const uint8_t *chunk_data = bytes + off + 8u;
-    const size_t chunk_total = 12u + (size_t)chunk_len;
+    size_t chunk_total = 0u;
+    size_t chunk_crc_len = 0u;
     uint32_t expected_crc;
     uint32_t computed_crc;
 
+    if (!ni_size_add(8u, (size_t)chunk_len, &chunk_crc_len) ||
+        !ni_size_add(chunk_crc_len, 4u, &chunk_total)) {
+      ni_set_error(err, err_capacity, "PNG chunk size overflow");
+      goto fail;
+    }
     if ((off + chunk_total) > size) {
       ni_set_error(err, err_capacity, "truncated PNG chunk");
       goto fail;
     }
 
     expected_crc = ni_read_u32be(bytes + off + 8u + (size_t)chunk_len);
-    computed_crc = ni_crc32(chunk_type, 4u + (size_t)chunk_len);
+    computed_crc = ni_crc32(chunk_type, chunk_crc_len - 4u);
     if (computed_crc != expected_crc) {
       ni_set_error(err, err_capacity, "PNG CRC mismatch");
       goto fail;
@@ -216,8 +228,13 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       saw_ihdr = 1;
     } else if (memcmp(chunk_type, "PLTE", 4u) == 0) {
       uint8_t *new_palette;
-      if (!saw_ihdr || (chunk_len == 0u) || ((chunk_len % 3u) != 0u)) {
+      if (!saw_ihdr || saw_plte || saw_idat || (chunk_len == 0u) ||
+          ((chunk_len % 3u) != 0u)) {
         ni_set_error(err, err_capacity, "invalid PLTE chunk");
+        goto fail;
+      }
+      if ((color_type != 2u) && (color_type != 3u) && (color_type != 6u)) {
+        ni_set_error(err, err_capacity, "PLTE is not allowed for this PNG color type");
         goto fail;
       }
       if ((chunk_len / 3u) > 256u) {
@@ -233,12 +250,17 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       ni_stbi_free(palette);
       palette = new_palette;
       palette_entries = (size_t)chunk_len / 3u;
+      saw_plte = 1;
     } else if (memcmp(chunk_type, "CgBI", 4u) == 0) {
+      if (saw_ihdr || is_cgbi) {
+        ni_set_error(err, err_capacity, "invalid CgBI chunk order");
+        goto fail;
+      }
       is_cgbi = 1;
     } else if (memcmp(chunk_type, "tRNS", 4u) == 0) {
       uint8_t *new_alpha;
-      if (!saw_ihdr) {
-        ni_set_error(err, err_capacity, "tRNS appears before IHDR");
+      if (!saw_ihdr || saw_trns || saw_idat) {
+        ni_set_error(err, err_capacity, "invalid tRNS chunk order");
         goto fail;
       }
       if (color_type == 3u) {
@@ -258,6 +280,7 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         palette_alpha = new_alpha;
         palette_alpha_count = (size_t)chunk_len;
       }
+      saw_trns = 1;
     } else if (memcmp(chunk_type, "IDAT", 4u) == 0) {
       uint8_t *new_idat;
       if (!saw_ihdr) {
@@ -277,6 +300,7 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       if (chunk_len > 0u) {
         memcpy(idat + idat_size - (size_t)chunk_len, chunk_data, (size_t)chunk_len);
       }
+      saw_idat = 1;
     } else if (memcmp(chunk_type, "IEND", 4u) == 0) {
       if (chunk_len != 0u) {
         ni_set_error(err, err_capacity, "invalid IEND chunk");
@@ -315,6 +339,10 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
     }
     if ((palette == NULL) || (palette_entries == 0u)) {
       ni_set_error(err, err_capacity, "indexed PNG requires PLTE");
+      goto fail;
+    }
+    if (palette_entries > ((size_t)1u << bit_depth)) {
+      ni_set_error(err, err_capacity, "indexed PNG palette exceeds bit depth");
       goto fail;
     }
   } else if (color_type == 4u) {
@@ -373,6 +401,7 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       goto fail;
     }
     rowbytes = (rowbytes + 7u) >> 3u;
+    max_rowbytes = rowbytes;
     if (!ni_size_add(rowbytes, 1u, &rowbytes) ||
         !ni_size_mul(rowbytes, (size_t)height, &raw_size)) {
       ni_set_error(err, err_capacity, "PNG raw size overflow");
@@ -396,6 +425,9 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         goto fail;
       }
       rowbytes = (rowbytes + 7u) >> 3u;
+      if (rowbytes > max_rowbytes) {
+        max_rowbytes = rowbytes;
+      }
       if (!ni_size_add(rowbytes, 1u, &rowbytes) ||
           !ni_size_mul(rowbytes, (size_t)ph, &pass_size) ||
           !ni_size_add(raw_size, pass_size, &raw_size)) {
@@ -428,6 +460,18 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
     size_t pass;
     size_t raw_off = 0u;
     const size_t pass_count = (interlace == 0u) ? 1u : 7u;
+    if (max_rowbytes > 0u) {
+      row_buf_a = (uint8_t *)ni_stbi_malloc(max_rowbytes);
+      row_buf_b = (uint8_t *)ni_stbi_malloc(max_rowbytes);
+      if ((row_buf_a == NULL) || (row_buf_b == NULL)) {
+        ni_stbi_free(row_buf_a);
+        ni_stbi_free(row_buf_b);
+        row_buf_a = NULL;
+        row_buf_b = NULL;
+        ni_set_error(err, err_capacity, "out of memory for PNG row buffers");
+        goto fail;
+      }
+    }
     for (pass = 0u; pass < pass_count; pass++) {
       const uint8_t x_start = (interlace == 0u) ? 0u : k_adam7_x_start[pass];
       const uint8_t y_start = (interlace == 0u) ? 0u : k_adam7_y_start[pass];
@@ -437,8 +481,8 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       const uint32_t ph =
           (interlace == 0u) ? height : ni_pass_size(height, y_start, y_step);
       size_t rowbytes;
-      uint8_t *prev_row = NULL;
-      uint8_t *cur_row = NULL;
+      uint8_t *prev_row = row_buf_a;
+      uint8_t *cur_row = row_buf_b;
       uint32_t y;
 
       if (pw == 0u || ph == 0u) {
@@ -449,14 +493,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         goto fail;
       }
       rowbytes = (rowbytes + 7u) >> 3u;
-      prev_row = (uint8_t *)ni_stbi_malloc(rowbytes);
-      cur_row = (uint8_t *)ni_stbi_malloc(rowbytes);
-      if ((prev_row == NULL) || (cur_row == NULL)) {
-        ni_stbi_free(prev_row);
-        ni_stbi_free(cur_row);
-        ni_set_error(err, err_capacity, "out of memory for PNG row buffers");
-        goto fail;
-      }
       memset(prev_row, 0, rowbytes);
 
       for (y = 0u; y < ph; y++) {
@@ -466,8 +502,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         raw_off += rowbytes;
         if (!ni_unfilter_row(cur_row, (y == 0u) ? NULL : prev_row, rowbytes,
                              bytes_per_pixel_for_filter, filter)) {
-          ni_stbi_free(prev_row);
-          ni_stbi_free(cur_row);
           ni_set_error(err, err_capacity, "unsupported PNG filter type");
           goto fail;
         }
@@ -487,8 +521,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
               uint8_t g = 0u;
               if (!ni_scale_to_8bit(
                       ni_read_packed_bits(cur_row, (size_t)x, bit_depth), bit_depth, &g)) {
-                ni_stbi_free(prev_row);
-                ni_stbi_free(cur_row);
                 ni_set_error(err, err_capacity, "invalid grayscale sample depth");
                 goto fail;
               }
@@ -523,8 +555,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
                                      ? (uint32_t)cur_row[(size_t)x]
                                      : ni_read_packed_bits(cur_row, (size_t)x, bit_depth);
             if (idx >= palette_entries) {
-              ni_stbi_free(prev_row);
-              ni_stbi_free(cur_row);
               ni_set_error(err, err_capacity, "palette index out of range");
               goto fail;
             }
@@ -578,8 +608,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
           cur_row = tmp;
         }
       }
-      ni_stbi_free(prev_row);
-      ni_stbi_free(cur_row);
     }
   }
 
@@ -592,6 +620,8 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
 
   ni_stbi_free(raw);
   ni_stbi_free(idat);
+  ni_stbi_free(row_buf_a);
+  ni_stbi_free(row_buf_b);
   ni_stbi_free(palette);
   ni_stbi_free(palette_alpha);
   return 1;
@@ -600,6 +630,8 @@ fail:
   ni_stbi_free(raw);
   ni_stbi_free(idat);
   ni_stbi_free(pixels);
+  ni_stbi_free(row_buf_a);
+  ni_stbi_free(row_buf_b);
   ni_stbi_free(palette);
   ni_stbi_free(palette_alpha);
   return 0;

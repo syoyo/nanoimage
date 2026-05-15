@@ -1,7 +1,11 @@
+#include "nanoimage_bmp.h"
+#include "nanoimage_gif.h"
 #include "nanoimage_jpeg.h"
 #include "nanoimage_png.h"
+#include "nanoimage_tga.h"
 #include "nanoimage_zlib.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +31,84 @@ static int test_zlib_stored(void) {
         err);
   CHECK(written == 5u, "zlib output size");
   CHECK(memcmp(out, "hello", 5u) == 0, "zlib output content");
+  return 0;
+}
+
+static int test_zlib_rejects_oversized_lengths(void) {
+  static const unsigned char compressed[] = {
+      0x78, 0x01, 0x01, 0x05, 0x00, 0xfa, 0xff, 0x68,
+      0x65, 0x6c, 0x6c, 0x6f, 0x06, 0x2c, 0x02, 0x15};
+  unsigned char out[16];
+  size_t written = 123u;
+  char err[128] = {0};
+
+  CHECK(!ni_zlib_inflate_stored(compressed, (size_t)UINT_MAX + 1u, out,
+                                sizeof(out), &written, err, sizeof(err)),
+        "zlib must reject oversized input length");
+  CHECK(strstr(err, "32-bit limit") != NULL, "oversized input error");
+  CHECK(written == 0u, "oversized input must not report output");
+
+  written = 123u;
+  err[0] = '\0';
+  CHECK(!ni_zlib_inflate_stored(compressed, sizeof(compressed), out,
+                                (size_t)UINT_MAX + 1u, &written, err,
+                                sizeof(err)),
+        "zlib must reject oversized output length");
+  CHECK(strstr(err, "32-bit limit") != NULL, "oversized output error");
+  CHECK(written == 0u, "oversized output must not report output");
+  return 0;
+}
+
+static int test_bmp_rgb24(void) {
+  static const unsigned char bmp[] = {
+      0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00,
+      0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+      0x00, 0x00, 0x01, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_load_bmp_from_memory(bmp, sizeof(bmp), &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "bmp dimensions");
+  CHECK(image.channels == 3u && image.bit_depth == 8u, "bmp format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u,
+        "bmp pixel");
+  ni_image_free(&image);
+  return 0;
+}
+
+static int test_tga_rgb24(void) {
+  static const unsigned char tga[] = {
+      0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x01, 0x00, 0x18, 0x00, 0x00, 0x00, 0xff};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_load_tga_from_memory(tga, sizeof(tga), &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "tga dimensions");
+  CHECK(image.channels == 3u && image.bit_depth == 8u, "tga format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u,
+        "tga pixel");
+  ni_image_free(&image);
+  return 0;
+}
+
+static int test_gif_indexed(void) {
+  static const unsigned char gif[] = {
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+      0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_load_gif_from_memory(gif, sizeof(gif), &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "gif dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "gif format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u &&
+            image.data[3] == 255u,
+        "gif pixel");
+  ni_image_free(&image);
   return 0;
 }
 
@@ -70,6 +152,66 @@ static int test_png_rejects_bad_crc(void) {
   CHECK(!ni_load_png_from_memory(png_bad_crc, sizeof(png_bad_crc), &image, err,
                                  sizeof(err)),
         "png bad crc must fail");
+  return 0;
+}
+
+static int test_png_rejects_duplicate_plte(void) {
+  static const unsigned char png[] = {
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x03, 0x00, 0x00, 0x00, 0x28, 0xcb, 0x34, 0xbb, 0x00, 0x00, 0x00,
+      0x03, 0x50, 0x4c, 0x54, 0x45, 0x00, 0x00, 0x00, 0xa7, 0x7a, 0x3d, 0xda,
+      0x00, 0x00, 0x00, 0x03, 0x50, 0x4c, 0x54, 0x45, 0x00, 0x00, 0x00, 0xa7,
+      0x7a, 0x3d, 0xda, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78,
+      0x01, 0x01, 0x02, 0x00, 0xfd, 0xff, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,
+      0x7e, 0x05, 0x0d, 0xd2, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+      0xae, 0x42, 0x60, 0x82};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(!ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)),
+        "png duplicate PLTE must fail");
+  CHECK(strstr(err, "invalid PLTE chunk") != NULL, "png duplicate PLTE error");
+  return 0;
+}
+
+static int test_png_rejects_plte_after_idat(void) {
+  static const unsigned char png[] = {
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x03, 0x00, 0x00, 0x00, 0x28, 0xcb, 0x34, 0xbb, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x01, 0x01, 0x02, 0x00, 0xfd, 0xff,
+      0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x7e, 0x05, 0x0d, 0xd2, 0x00, 0x00,
+      0x00, 0x03, 0x50, 0x4c, 0x54, 0x45, 0x00, 0x00, 0x00, 0xa7, 0x7a, 0x3d,
+      0xda, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60,
+      0x82};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(!ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)),
+        "png PLTE after IDAT must fail");
+  CHECK(strstr(err, "invalid PLTE chunk") != NULL,
+        "png PLTE-after-IDAT error");
+  return 0;
+}
+
+static int test_png_rejects_palette_exceeding_bit_depth(void) {
+  static const unsigned char png[] = {
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x01, 0x03, 0x00, 0x00, 0x00, 0x25, 0xdb, 0x56, 0xca, 0x00, 0x00, 0x00,
+      0x09, 0x50, 0x4c, 0x54, 0x45, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0x80,
+      0x80, 0x80, 0x44, 0xc8, 0x83, 0x9a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44,
+      0x41, 0x54, 0x78, 0x01, 0x01, 0x02, 0x00, 0xfd, 0xff, 0x00, 0x00, 0x00,
+      0x02, 0x00, 0x01, 0x7e, 0x05, 0x0d, 0xd2, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(!ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)),
+        "png oversized indexed palette must fail");
+  CHECK(strstr(err, "palette exceeds bit depth") != NULL,
+        "png indexed palette depth error");
   return 0;
 }
 
@@ -300,6 +442,15 @@ static int test_rejects_non_image_magic(void) {
   CHECK(!ni_load_jpeg_from_memory(not_image, sizeof(not_image), &image, err,
                                   sizeof(err)),
         "jpeg must reject non-jpeg signature");
+  CHECK(!ni_load_bmp_from_memory(not_image, sizeof(not_image), &image, err,
+                                 sizeof(err)),
+        "bmp must reject non-bmp signature");
+  CHECK(!ni_load_gif_from_memory(not_image, sizeof(not_image), &image, err,
+                                 sizeof(err)),
+        "gif must reject non-gif signature");
+  CHECK(!ni_load_tga_from_memory(not_image, sizeof(not_image), &image, err,
+                                 sizeof(err)),
+        "tga must reject truncated header");
   return 0;
 }
 
@@ -386,10 +537,31 @@ int main(void) {
   if (test_zlib_stored() != 0) {
     return 1;
   }
+  if (test_zlib_rejects_oversized_lengths() != 0) {
+    return 1;
+  }
+  if (test_bmp_rgb24() != 0) {
+    return 1;
+  }
+  if (test_tga_rgb24() != 0) {
+    return 1;
+  }
+  if (test_gif_indexed() != 0) {
+    return 1;
+  }
   if (test_png_rgba8() != 0) {
     return 1;
   }
   if (test_png_rejects_bad_crc() != 0) {
+    return 1;
+  }
+  if (test_png_rejects_duplicate_plte() != 0) {
+    return 1;
+  }
+  if (test_png_rejects_plte_after_idat() != 0) {
+    return 1;
+  }
+  if (test_png_rejects_palette_exceeding_bit_depth() != 0) {
     return 1;
   }
   if (test_jpeg_grayscale() != 0) {

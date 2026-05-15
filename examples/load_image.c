@@ -1,5 +1,8 @@
+#include "nanoimage_bmp.h"
+#include "nanoimage_gif.h"
 #include "nanoimage_jpeg.h"
 #include "nanoimage_png.h"
+#include "nanoimage_tga.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,6 +61,21 @@ static int is_jpeg(const unsigned char *data, size_t size) {
   return size >= 2 && data[0] == 0xff && data[1] == 0xd8;
 }
 
+static int is_bmp(const unsigned char *data, size_t size) {
+  return size >= 2 && data[0] == 'B' && data[1] == 'M';
+}
+
+static int is_gif(const unsigned char *data, size_t size) {
+  return size >= 6 &&
+         (memcmp(data, "GIF87a", 6) == 0 || memcmp(data, "GIF89a", 6) == 0);
+}
+
+static int has_ext(const char *path, const char *ext) {
+  const size_t path_len = strlen(path);
+  const size_t ext_len = strlen(ext);
+  return (path_len >= ext_len) && (strcmp(path + path_len - ext_len, ext) == 0);
+}
+
 int main(int argc, char **argv) {
   unsigned char *bytes = NULL;
   size_t size = 0;
@@ -66,7 +84,7 @@ int main(int argc, char **argv) {
   int ok = 0;
 
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s <input.(png|jpg|jpeg)>\n", argv[0]);
+    fprintf(stderr, "Usage: %s <input.(png|jpg|jpeg|bmp|tga|gif)>\n", argv[0]);
     return 1;
   }
 
@@ -79,6 +97,12 @@ int main(int argc, char **argv) {
     ok = ni_load_png_from_memory(bytes, size, &image, err, sizeof(err));
   } else if (is_jpeg(bytes, size)) {
     ok = ni_load_jpeg_from_memory(bytes, size, &image, err, sizeof(err));
+  } else if (is_bmp(bytes, size)) {
+    ok = ni_load_bmp_from_memory(bytes, size, &image, err, sizeof(err));
+  } else if (is_gif(bytes, size)) {
+    ok = ni_load_gif_from_memory(bytes, size, &image, err, sizeof(err));
+  } else if (has_ext(argv[1], ".tga") || has_ext(argv[1], ".TGA")) {
+    ok = ni_load_tga_from_memory(bytes, size, &image, err, sizeof(err));
   } else {
     fprintf(stderr, "Unsupported input format: %s\n", argv[1]);
     free(bytes);

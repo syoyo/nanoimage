@@ -6,7 +6,10 @@ local core_sources = {
     "src/nanoimage_alloc.c",
     "src/nanoimage_zlib.c",
     "src/nanoimage_png.c",
-    "src/nanoimage_jpeg.c"
+    "src/nanoimage_jpeg.c",
+    "src/nanoimage_bmp.c",
+    "src/nanoimage_tga.c",
+    "src/nanoimage_gif.c"
 }
 
 target("nanoimage_example")
