@@ -2,6 +2,7 @@
 
 #include "nanoimage_alloc_internal.h"
 #include "nanoimage_zlib.h"
+#include "nanoimage_zlib_internal.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -145,6 +146,7 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
   size_t output_stride = 0u;
   size_t output_size = 0u;
   size_t idat_size = 0u;
+  size_t idat_span_count = 0u;
   size_t raw_size = 0u;
   size_t max_rowbytes = 0u;
   size_t off;
@@ -153,11 +155,9 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
   int saw_trns = 0;
   int saw_idat = 0;
   int saw_iend = 0;
-  uint8_t *idat = NULL;
+  ni_zlib_span *idat_spans = NULL;
   uint8_t *raw = NULL;
   uint8_t *pixels = NULL;
-  uint8_t *row_buf_a = NULL;
-  uint8_t *row_buf_b = NULL;
   uint8_t *palette = NULL;
   size_t palette_entries = 0u;
   uint8_t *palette_alpha = NULL;
@@ -282,7 +282,9 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       }
       saw_trns = 1;
     } else if (memcmp(chunk_type, "IDAT", 4u) == 0) {
-      uint8_t *new_idat;
+      ni_zlib_span *new_idat_spans;
+      size_t new_span_count;
+      size_t spans_size;
       if (!saw_ihdr) {
         ni_set_error(err, err_capacity, "IDAT appears before IHDR");
         goto fail;
@@ -291,15 +293,20 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         ni_set_error(err, err_capacity, "PNG IDAT too large");
         goto fail;
       }
-      new_idat = (uint8_t *)ni_stbi_realloc(idat, idat_size);
-      if (new_idat == NULL) {
-        ni_set_error(err, err_capacity, "out of memory collecting IDAT");
+      if (!ni_size_add(idat_span_count, 1u, &new_span_count) ||
+          !ni_size_mul(new_span_count, sizeof(*idat_spans), &spans_size)) {
+        ni_set_error(err, err_capacity, "PNG IDAT span table overflow");
         goto fail;
       }
-      idat = new_idat;
-      if (chunk_len > 0u) {
-        memcpy(idat + idat_size - (size_t)chunk_len, chunk_data, (size_t)chunk_len);
+      new_idat_spans = (ni_zlib_span *)ni_stbi_realloc(idat_spans, spans_size);
+      if (new_idat_spans == NULL) {
+        ni_set_error(err, err_capacity, "out of memory collecting IDAT spans");
+        goto fail;
       }
+      idat_spans = new_idat_spans;
+      idat_spans[idat_span_count].data = chunk_data;
+      idat_spans[idat_span_count].size = (size_t)chunk_len;
+      idat_span_count = new_span_count;
       saw_idat = 1;
     } else if (memcmp(chunk_type, "IEND", 4u) == 0) {
       if (chunk_len != 0u) {
@@ -444,10 +451,12 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
   }
   {
     size_t inflated = 0u;
-    if (!(is_cgbi ? ni_zlib_inflate_raw(idat, idat_size, raw, raw_size, &inflated,
-                                        err, err_capacity)
-                  : ni_zlib_inflate_stored(idat, idat_size, raw, raw_size,
-                                           &inflated, err, err_capacity))) {
+    if (!(is_cgbi ? ni_zlib_inflate_raw_spans(idat_spans, idat_span_count, raw,
+                                              raw_size, &inflated, err,
+                                              err_capacity)
+                  : ni_zlib_inflate_stored_spans(idat_spans, idat_span_count, raw,
+                                                 raw_size, &inflated, err,
+                                                 err_capacity))) {
       goto fail;
     }
     if (inflated != raw_size) {
@@ -455,23 +464,13 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       goto fail;
     }
   }
+  ni_stbi_free(idat_spans);
+  idat_spans = NULL;
 
   {
     size_t pass;
     size_t raw_off = 0u;
     const size_t pass_count = (interlace == 0u) ? 1u : 7u;
-    if (max_rowbytes > 0u) {
-      row_buf_a = (uint8_t *)ni_stbi_malloc(max_rowbytes);
-      row_buf_b = (uint8_t *)ni_stbi_malloc(max_rowbytes);
-      if ((row_buf_a == NULL) || (row_buf_b == NULL)) {
-        ni_stbi_free(row_buf_a);
-        ni_stbi_free(row_buf_b);
-        row_buf_a = NULL;
-        row_buf_b = NULL;
-        ni_set_error(err, err_capacity, "out of memory for PNG row buffers");
-        goto fail;
-      }
-    }
     for (pass = 0u; pass < pass_count; pass++) {
       const uint8_t x_start = (interlace == 0u) ? 0u : k_adam7_x_start[pass];
       const uint8_t y_start = (interlace == 0u) ? 0u : k_adam7_y_start[pass];
@@ -481,8 +480,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       const uint32_t ph =
           (interlace == 0u) ? height : ni_pass_size(height, y_start, y_step);
       size_t rowbytes;
-      uint8_t *prev_row = row_buf_a;
-      uint8_t *cur_row = row_buf_b;
       uint32_t y;
 
       if (pw == 0u || ph == 0u) {
@@ -493,15 +490,15 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         goto fail;
       }
       rowbytes = (rowbytes + 7u) >> 3u;
-      memset(prev_row, 0, rowbytes);
 
       for (y = 0u; y < ph; y++) {
         const uint8_t filter = raw[raw_off++];
+        uint8_t *cur_row = raw + raw_off;
+        const uint8_t *prev_row = (y == 0u) ? NULL : (cur_row - (rowbytes + 1u));
         uint32_t x;
-        memcpy(cur_row, raw + raw_off, rowbytes);
         raw_off += rowbytes;
-        if (!ni_unfilter_row(cur_row, (y == 0u) ? NULL : prev_row, rowbytes,
-                             bytes_per_pixel_for_filter, filter)) {
+        if (!ni_unfilter_row(cur_row, prev_row, rowbytes, bytes_per_pixel_for_filter,
+                             filter)) {
           ni_set_error(err, err_capacity, "unsupported PNG filter type");
           goto fail;
         }
@@ -602,11 +599,6 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
           }
         }
 
-        {
-          uint8_t *tmp = prev_row;
-          prev_row = cur_row;
-          cur_row = tmp;
-        }
       }
     }
   }
@@ -619,19 +611,15 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
   out->data = pixels;
 
   ni_stbi_free(raw);
-  ni_stbi_free(idat);
-  ni_stbi_free(row_buf_a);
-  ni_stbi_free(row_buf_b);
+  ni_stbi_free(idat_spans);
   ni_stbi_free(palette);
   ni_stbi_free(palette_alpha);
   return 1;
 
 fail:
   ni_stbi_free(raw);
-  ni_stbi_free(idat);
+  ni_stbi_free(idat_spans);
   ni_stbi_free(pixels);
-  ni_stbi_free(row_buf_a);
-  ni_stbi_free(row_buf_b);
   ni_stbi_free(palette);
   ni_stbi_free(palette_alpha);
   return 0;

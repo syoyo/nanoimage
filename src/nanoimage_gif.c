@@ -123,8 +123,96 @@ static int ni_gif_read_code(const uint8_t *data, size_t size, size_t *bit_pos,
   return 1;
 }
 
+typedef struct {
+  uint8_t *pixels;
+  uint16_t width;
+  uint16_t height;
+  const uint8_t *color_table;
+  size_t color_table_entries;
+  uint8_t transparent_index;
+  int has_transparent;
+  int interlaced;
+  size_t out_pos;
+  uint8_t pass;
+  uint32_t x;
+  uint32_t y;
+} ni_gif_output_state;
+
+static int ni_gif_advance_interlaced_row(ni_gif_output_state *state) {
+  static const uint8_t k_starts[4] = {0u, 4u, 2u, 1u};
+  static const uint8_t k_steps[4] = {8u, 8u, 4u, 2u};
+
+  state->y += (uint32_t)k_steps[state->pass];
+  while ((state->pass < 4u) && (state->y >= state->height)) {
+    state->pass++;
+    if (state->pass >= 4u) {
+      return 1;
+    }
+    state->y = (uint32_t)k_starts[state->pass];
+  }
+
+  return 1;
+}
+
+static void ni_gif_output_init(ni_gif_output_state *state, uint8_t *pixels,
+                               uint16_t width, uint16_t height,
+                               const uint8_t *color_table,
+                               size_t color_table_entries,
+                               uint8_t transparent_index,
+                               int has_transparent, int interlaced) {
+  state->pixels = pixels;
+  state->width = width;
+  state->height = height;
+  state->color_table = color_table;
+  state->color_table_entries = color_table_entries;
+  state->transparent_index = transparent_index;
+  state->has_transparent = has_transparent;
+  state->interlaced = interlaced;
+  state->out_pos = 0u;
+  state->pass = 0u;
+  state->x = 0u;
+  state->y = interlaced ? 0u : 0u;
+}
+
+static int ni_gif_emit_index(ni_gif_output_state *state, uint8_t idx, char *err,
+                             size_t err_capacity) {
+  uint8_t *dst;
+
+  if ((uint32_t)state->y >= (uint32_t)state->height) {
+    ni_set_error(err, err_capacity, "GIF image data overflow");
+    return 0;
+  }
+  if ((size_t)idx >= state->color_table_entries) {
+    ni_set_error(err, err_capacity, "GIF palette index out of range");
+    return 0;
+  }
+
+  dst = state->pixels +
+        (((size_t)state->y * (size_t)state->width) + (size_t)state->x) * 4u;
+  dst[0] = state->color_table[(size_t)idx * 3u + 0u];
+  dst[1] = state->color_table[(size_t)idx * 3u + 1u];
+  dst[2] = state->color_table[(size_t)idx * 3u + 2u];
+  dst[3] = (state->has_transparent && (idx == state->transparent_index)) ? 0u : 255u;
+
+  state->out_pos++;
+  state->x++;
+  if (state->x >= state->width) {
+    state->x = 0u;
+    if (state->interlaced) {
+      if (!ni_gif_advance_interlaced_row(state)) {
+        ni_set_error(err, err_capacity, "GIF interlace overflow");
+        return 0;
+      }
+    } else {
+      state->y++;
+    }
+  }
+
+  return 1;
+}
+
 static int ni_gif_lzw_decode(const uint8_t *data, size_t size,
-                             uint8_t min_code_size, uint8_t *out,
+                             uint8_t min_code_size, ni_gif_output_state *state,
                              size_t out_size, char *err, size_t err_capacity) {
   uint16_t prefix[4096];
   uint8_t suffix[4096];
@@ -139,7 +227,7 @@ static int ni_gif_lzw_decode(const uint8_t *data, size_t size,
   unsigned code_size;
   int have_old = 0;
 
-  if ((data == NULL) || (out == NULL) || (min_code_size < 2u) ||
+  if ((data == NULL) || (state == NULL) || (min_code_size < 2u) ||
       (min_code_size > 8u)) {
     ni_set_error(err, err_capacity, "invalid GIF LZW parameters");
     return 0;
@@ -200,7 +288,10 @@ static int ni_gif_lzw_decode(const uint8_t *data, size_t size,
         ni_set_error(err, err_capacity, "GIF LZW output overflow");
         return 0;
       }
-      out[out_pos++] = stack[--stack_size];
+      if (!ni_gif_emit_index(state, stack[--stack_size], err, err_capacity)) {
+        return 0;
+      }
+      out_pos++;
     }
 
     if (have_old && (next_code < 4096u)) {
@@ -233,7 +324,6 @@ int ni_load_gif_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
   uint8_t transparent_index = 0u;
   int has_transparent = 0;
   size_t off = 13u;
-  uint8_t *indices = NULL;
   uint8_t *pixels = NULL;
 
   if ((bytes == NULL) || (out == NULL)) {
@@ -309,10 +399,9 @@ int ni_load_gif_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       uint8_t min_code_size;
       uint8_t *compressed = NULL;
       size_t compressed_size = 0u;
+      ni_gif_output_state output_state;
       size_t pixel_count;
       size_t output_size;
-      uint32_t y;
-      size_t src_row = 0u;
 
       if ((off + 9u) > size) {
         ni_set_error(err, err_capacity, "truncated GIF image descriptor");
@@ -362,69 +451,23 @@ int ni_load_gif_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
         return 0;
       }
 
-      indices = (uint8_t *)ni_stbi_malloc(pixel_count);
       pixels = (uint8_t *)ni_stbi_malloc(output_size);
-      if ((indices == NULL) || (pixels == NULL)) {
+      if (pixels == NULL) {
         ni_stbi_free(compressed);
-        ni_stbi_free(indices);
         ni_stbi_free(pixels);
         ni_set_error(err, err_capacity, "out of memory for GIF pixels");
         return 0;
       }
-      if (!ni_gif_lzw_decode(compressed, compressed_size, min_code_size, indices,
+      ni_gif_output_init(&output_state, pixels, image_width, image_height, color_table,
+                         color_table_entries, transparent_index, has_transparent,
+                         (image_packed & 0x40u) != 0u);
+      if (!ni_gif_lzw_decode(compressed, compressed_size, min_code_size, &output_state,
                              pixel_count, err, err_capacity)) {
         ni_stbi_free(compressed);
-        ni_stbi_free(indices);
         ni_stbi_free(pixels);
         return 0;
       }
       ni_stbi_free(compressed);
-
-      if ((image_packed & 0x40u) != 0u) {
-        static const uint8_t k_starts[4] = {0u, 4u, 2u, 1u};
-        static const uint8_t k_steps[4] = {8u, 8u, 4u, 2u};
-        uint8_t pass;
-        for (pass = 0u; pass < 4u; pass++) {
-          for (y = k_starts[pass]; y < image_height; y += k_steps[pass]) {
-            uint32_t x;
-            for (x = 0u; x < image_width; x++) {
-              const uint8_t idx = indices[src_row * (size_t)image_width + (size_t)x];
-              uint8_t *dst = pixels + ((size_t)y * (size_t)image_width + (size_t)x) * 4u;
-              if ((size_t)idx >= color_table_entries) {
-                ni_stbi_free(indices);
-                ni_stbi_free(pixels);
-                ni_set_error(err, err_capacity, "GIF palette index out of range");
-                return 0;
-              }
-              dst[0] = color_table[(size_t)idx * 3u + 0u];
-              dst[1] = color_table[(size_t)idx * 3u + 1u];
-              dst[2] = color_table[(size_t)idx * 3u + 2u];
-              dst[3] = (has_transparent && (idx == transparent_index)) ? 0u : 255u;
-            }
-            src_row++;
-          }
-        }
-      } else {
-        for (y = 0u; y < image_height; y++) {
-          uint32_t x;
-          for (x = 0u; x < image_width; x++) {
-            const uint8_t idx = indices[(size_t)y * (size_t)image_width + (size_t)x];
-            uint8_t *dst = pixels + ((size_t)y * (size_t)image_width + (size_t)x) * 4u;
-            if ((size_t)idx >= color_table_entries) {
-              ni_stbi_free(indices);
-              ni_stbi_free(pixels);
-              ni_set_error(err, err_capacity, "GIF palette index out of range");
-              return 0;
-            }
-            dst[0] = color_table[(size_t)idx * 3u + 0u];
-            dst[1] = color_table[(size_t)idx * 3u + 1u];
-            dst[2] = color_table[(size_t)idx * 3u + 2u];
-            dst[3] = (has_transparent && (idx == transparent_index)) ? 0u : 255u;
-          }
-        }
-      }
-
-      ni_stbi_free(indices);
       out->width = image_width;
       out->height = image_height;
       out->channels = 4u;

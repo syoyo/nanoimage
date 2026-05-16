@@ -137,6 +137,188 @@ static int test_png_rgba8(void) {
   return 0;
 }
 
+static int test_png_split_idat(void) {
+  static const unsigned char png[] = {
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+      0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+      0x00, 0x00, 0x00, 0x08, 0x49, 0x44, 0x41, 0x54, 0x78, 0x01, 0x01,
+      0x05, 0x00, 0xfa, 0xff, 0x00, 0x1f, 0x41, 0x8b, 0xb7, 0x00, 0x00,
+      0x00, 0x08, 0x49, 0x44, 0x41, 0x54, 0xff, 0x00, 0x00, 0xff, 0x05,
+      0x00, 0x01, 0xff, 0x01, 0xa0, 0xb2, 0x13, 0x00, 0x00, 0x00, 0x00,
+      0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "split-idat png dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "split-idat png format");
+  CHECK(image.data_size == 4u, "split-idat png pixel size");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u &&
+            image.data[3] == 255u,
+        "split-idat png pixel value");
+  ni_image_free(&image);
+  return 0;
+}
+
+static int test_write_png_roundtrip(void) {
+  static uint8_t pixel[] = {255u, 0u, 0u, 255u};
+  ni_image src = {1u, 1u, 4u, 8u, sizeof(pixel), pixel};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_png_to_memory(&src, &out, err, sizeof(err)), err);
+  CHECK(ni_load_png_from_memory(out.data, out.size, &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "written png dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "written png format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u &&
+            image.data[3] == 255u,
+        "written png pixel");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+typedef struct {
+  uint8_t *data;
+  size_t size;
+  size_t capacity;
+} test_write_buffer;
+
+static int test_write_callback(const uint8_t *data, size_t size, void *user_data) {
+  test_write_buffer *buffer = (test_write_buffer *)user_data;
+  uint8_t *new_data;
+  size_t new_capacity = buffer->capacity;
+
+  while (new_capacity < (buffer->size + size)) {
+    new_capacity = (new_capacity == 0u) ? 256u : new_capacity * 2u;
+  }
+
+  new_data = (uint8_t *)realloc(buffer->data, new_capacity);
+  if (new_data == NULL) {
+    return 0;
+  }
+  buffer->data = new_data;
+  buffer->capacity = new_capacity;
+  memcpy(buffer->data + buffer->size, data, size);
+  buffer->size += size;
+  return 1;
+}
+
+static int test_write_png_callback_roundtrip(void) {
+  static uint8_t pixel[] = {255u, 0u, 0u, 255u};
+  ni_image src = {1u, 1u, 4u, 8u, sizeof(pixel), pixel};
+  test_write_buffer out = {NULL, 0u, 0u};
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_png(&src, test_write_callback, &out, err, sizeof(err)), err);
+  CHECK(ni_load_png_from_memory(out.data, out.size, &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "callback png dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "callback png format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u &&
+            image.data[3] == 255u,
+        "callback png pixel");
+  ni_image_free(&image);
+  free(out.data);
+  return 0;
+}
+
+static int test_write_bmp_roundtrip(void) {
+  static uint8_t pixel[] = {255u, 0u, 0u};
+  ni_image src = {1u, 1u, 3u, 8u, sizeof(pixel), pixel};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_bmp_to_memory(&src, &out, err, sizeof(err)), err);
+  CHECK(ni_load_bmp_from_memory(out.data, out.size, &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "written bmp dimensions");
+  CHECK(image.channels == 3u && image.bit_depth == 8u, "written bmp format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u,
+        "written bmp pixel");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_write_tga_roundtrip(void) {
+  static uint8_t pixel[] = {255u, 0u, 0u, 255u};
+  ni_image src = {1u, 1u, 4u, 8u, sizeof(pixel), pixel};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_tga_to_memory(&src, &out, err, sizeof(err)), err);
+  CHECK(ni_load_tga_from_memory(out.data, out.size, &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "written tga dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "written tga format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u &&
+            image.data[3] == 255u,
+        "written tga pixel");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_write_gif_roundtrip(void) {
+  static uint8_t pixel[] = {255u, 0u, 0u, 255u};
+  ni_image src = {1u, 1u, 4u, 8u, sizeof(pixel), pixel};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_gif_to_memory(&src, &out, err, sizeof(err)), err);
+  CHECK(ni_load_gif_from_memory(out.data, out.size, &image, err, sizeof(err)), err);
+  CHECK(image.width == 1u && image.height == 1u, "written gif dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "written gif format");
+  CHECK(image.data[0] == 255u && image.data[1] == 0u && image.data[2] == 0u &&
+            image.data[3] == 255u,
+        "written gif pixel");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_write_jpeg_roundtrip(void) {
+  static uint8_t pixels[8u * 8u * 3u];
+  ni_image src = {8u, 8u, 3u, 8u, sizeof(pixels), pixels};
+  ni_jpeg_write_options options = {95};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+  size_t i;
+
+  for (i = 0u; i < sizeof(pixels); i += 3u) {
+    pixels[i + 0u] = 255u;
+    pixels[i + 1u] = 0u;
+    pixels[i + 2u] = 0u;
+  }
+
+  CHECK(ni_write_jpeg_to_memory(&src, &options, &out, err, sizeof(err)), err);
+  CHECK(ni_load_jpeg_from_memory(out.data, out.size, &image, err, sizeof(err)), err);
+  CHECK(image.width == 8u && image.height == 8u, "written jpeg dimensions");
+  CHECK(image.channels == 3u && image.bit_depth == 8u, "written jpeg format");
+  CHECK(image.data[0] >= 180u && image.data[1] <= 80u && image.data[2] <= 80u,
+        "written jpeg pixel range");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_write_jpeg_rejects_invalid_quality(void) {
+  static uint8_t pixel[] = {255u, 0u, 0u};
+  ni_image src = {1u, 1u, 3u, 8u, sizeof(pixel), pixel};
+  ni_jpeg_write_options options = {0};
+  ni_buffer out;
+  char err[128] = {0};
+
+  CHECK(!ni_write_jpeg_to_memory(&src, &options, &out, err, sizeof(err)),
+        "jpeg writer must reject invalid quality");
+  return 0;
+}
+
 static int test_png_rejects_bad_crc(void) {
   static const unsigned char png_bad_crc[] = {
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
@@ -396,7 +578,7 @@ static int test_allocator_callbacks(void) {
   size_t alloc_count = 0;
   size_t free_count = 0;
   ni_allocator allocator = {test_malloc, test_realloc, test_free, &alloc_count,
-                            SIZE_MAX};
+                            SIZE_MAX, SIZE_MAX};
 
   ni_set_allocator(&allocator);
   CHECK(ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)), err);
@@ -422,11 +604,60 @@ static int test_allocator_max_bound(void) {
       0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
   ni_image image;
   char err[128] = {0};
-  ni_allocator allocator = {test_malloc, test_realloc, test_free, NULL, 3u};
+  ni_allocator allocator = {test_malloc, test_realloc, test_free, NULL, 3u,
+                            SIZE_MAX};
 
   ni_set_allocator(&allocator);
   CHECK(!ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)),
         "bounded allocator must reject oversized decode allocations");
+  ni_reset_allocator();
+  return 0;
+}
+
+static int test_allocator_total_bound(void) {
+  static const unsigned char png[] = {
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+      0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+      0x00, 0x00, 0x00, 0x10, 0x49, 0x44, 0x41, 0x54, 0x78, 0x01, 0x01,
+      0x05, 0x00, 0xfa, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0x05, 0x00,
+      0x01, 0xff, 0xfa, 0x5c, 0x88, 0xd1, 0x00, 0x00, 0x00, 0x00, 0x49,
+      0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82};
+  ni_image image;
+  char err[128] = {0};
+  ni_allocator allocator = {test_malloc, test_realloc, test_free, NULL,
+                            SIZE_MAX, 24u};
+
+  ni_set_allocator(&allocator);
+  CHECK(!ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)),
+        "total allocator bound must reject oversized active footprint");
+
+  allocator.max_total_allocation = 25u;
+  ni_set_allocator(&allocator);
+  CHECK(ni_load_png_from_memory(png, sizeof(png), &image, err, sizeof(err)), err);
+  ni_image_free(&image);
+  ni_reset_allocator();
+  return 0;
+}
+
+static int test_gif_allocator_total_bound(void) {
+  static const unsigned char gif[] = {
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+      0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+      0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b};
+  ni_image image;
+  char err[128] = {0};
+  ni_allocator allocator = {test_malloc, test_realloc, test_free, NULL,
+                            SIZE_MAX, 5u};
+
+  ni_set_allocator(&allocator);
+  CHECK(!ni_load_gif_from_memory(gif, sizeof(gif), &image, err, sizeof(err)),
+        "total allocator bound must reject oversized GIF active footprint");
+
+  allocator.max_total_allocation = 6u;
+  ni_set_allocator(&allocator);
+  CHECK(ni_load_gif_from_memory(gif, sizeof(gif), &image, err, sizeof(err)), err);
+  ni_image_free(&image);
   ni_reset_allocator();
   return 0;
 }
@@ -552,6 +783,30 @@ int main(void) {
   if (test_png_rgba8() != 0) {
     return 1;
   }
+  if (test_png_split_idat() != 0) {
+    return 1;
+  }
+  if (test_write_png_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_png_callback_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_bmp_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_tga_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_gif_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_jpeg_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_jpeg_rejects_invalid_quality() != 0) {
+    return 1;
+  }
   if (test_png_rejects_bad_crc() != 0) {
     return 1;
   }
@@ -577,6 +832,12 @@ int main(void) {
     return 1;
   }
   if (test_allocator_max_bound() != 0) {
+    return 1;
+  }
+  if (test_allocator_total_bound() != 0) {
+    return 1;
+  }
+  if (test_gif_allocator_total_bound() != 0) {
     return 1;
   }
   if (test_rejects_non_image_magic() != 0) {

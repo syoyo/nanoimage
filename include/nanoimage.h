@@ -11,6 +11,8 @@
 typedef void *(*ni_malloc_callback)(size_t size, void *user_data);
 typedef void *(*ni_realloc_callback)(void *ptr, size_t size, void *user_data);
 typedef void (*ni_free_callback)(void *ptr, void *user_data);
+typedef int (*ni_write_callback)(const uint8_t *data, size_t size,
+                                 void *user_data);
 
 typedef struct {
   ni_malloc_callback malloc_fn;
@@ -18,6 +20,7 @@ typedef struct {
   ni_free_callback free_fn;
   void *user_data;
   size_t max_allocation;
+  size_t max_total_allocation;
 } ni_allocator;
 
 typedef struct {
@@ -29,8 +32,14 @@ typedef struct {
   uint8_t *data;
 } ni_image;
 
+typedef struct {
+  uint8_t *data;
+  size_t size;
+} ni_buffer;
+
 void ni_set_allocator(const ni_allocator *allocator);
 void ni_reset_allocator(void);
 void ni_image_free(ni_image *image);
+void ni_buffer_free(ni_buffer *buffer);
 
 #endif

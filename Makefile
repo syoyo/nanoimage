@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Werror -pedantic
 CPPFLAGS ?= -Iinclude
 
-SRC = src/nanoimage_alloc.c src/nanoimage_zlib.c src/nanoimage_png.c src/nanoimage_jpeg.c src/nanoimage_bmp.c src/nanoimage_tga.c src/nanoimage_gif.c
+SRC = src/nanoimage_alloc.c src/nanoimage_write.c src/nanoimage_zlib.c src/nanoimage_png.c src/nanoimage_png_write.c src/nanoimage_jpeg.c src/nanoimage_jpeg_write.c src/nanoimage_bmp.c src/nanoimage_bmp_write.c src/nanoimage_tga.c src/nanoimage_tga_write.c src/nanoimage_gif.c src/nanoimage_gif_write.c
 TEST_SRC = tests/test_nanoimage.c
 TEST_BIN = tests/test_nanoimage
 EXAMPLE_BIN = build/linux/x86_64/release/nanoimage_example
