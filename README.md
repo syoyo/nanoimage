@@ -103,6 +103,20 @@ This opt-in path compiles the local upstream sources from
 requires runtime SSE4.1 support; otherwise nanoimage falls back to the built-in
 portable PNG paths unless `NI_PNG_WRITE_REQUIRE_FAST` is requested.
 
+### Custom PNG codec attribution
+
+The optional `CUSTOM_PNG_CODEC=1` bridge builds against upstream codec sources
+that are not part of nanoimage's default portable C path:
+
+- fpnge: Copyright 2021 Google LLC. Licensed under the Apache License, Version
+  2.0. See `/mnt/disk1/work/fpnge/LICENSE` in the local upstream checkout.
+- fpng: Released under the Unlicense / public domain dedication. The upstream
+  source also attributes public-domain PNG writer code by Alex Evans, original
+  miniz Deflate/Huffman code by R. Geldreich, Jr., and Huffman code-size logic
+  by Alistair Moffat and Jyrki Katajainen. See
+  `/mnt/disk1/work/fpng/src/fpng.cpp` and `/mnt/disk1/work/fpng/README.md` in
+  the local upstream checkout.
+
 ## Allocation hardening
 
 Decoders consume in-memory buffers (`pointer + size`) and return decoded pixels
