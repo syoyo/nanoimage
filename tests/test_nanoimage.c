@@ -225,6 +225,124 @@ static int test_write_png_callback_roundtrip(void) {
   return 0;
 }
 
+typedef struct {
+  const uint8_t *rows;
+  size_t row_stride;
+  int fail_at_row;
+} test_row_source;
+
+static int test_png_row_source(uint32_t y, uint8_t *dst, size_t dst_size,
+                               void *user_data) {
+  const test_row_source *source = (const test_row_source *)user_data;
+  if ((source->fail_at_row >= 0) && ((uint32_t)source->fail_at_row == y)) {
+    return 0;
+  }
+  memcpy(dst, source->rows + (size_t)y * source->row_stride, dst_size);
+  return 1;
+}
+
+typedef struct {
+  uint8_t rows[16];
+  size_t row_stride;
+  uint32_t rows_seen;
+} test_row_sink;
+
+static int test_png_row_sink(const ni_image_info *info, uint32_t y,
+                             const uint8_t *src, size_t src_size,
+                             void *user_data) {
+  test_row_sink *sink = (test_row_sink *)user_data;
+  if ((info->width != 2u) || (info->height != 2u) ||
+      (info->channels != 4u) || (info->bit_depth != 8u) ||
+      (src_size != sink->row_stride)) {
+    return 0;
+  }
+  memcpy(sink->rows + (size_t)y * sink->row_stride, src, src_size);
+  sink->rows_seen++;
+  return 1;
+}
+
+static int test_write_png_rows_roundtrip(void) {
+  static const uint8_t pixels[] = {
+      255u, 0u,   0u,   255u, 0u,   255u, 0u,   255u,
+      0u,   0u,   255u, 255u, 255u, 255u, 255u, 255u};
+  ni_image_info info = {2u, 2u, 4u, 8u, 8u};
+  test_row_source source = {pixels, 8u, -1};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_png_rows_to_memory(&info, test_png_row_source, &source, NULL,
+                                    &out, err, sizeof(err)),
+        err);
+  CHECK(ni_load_png_from_memory(out.data, out.size, &image, err, sizeof(err)),
+        err);
+  CHECK(image.width == 2u && image.height == 2u, "row png dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "row png format");
+  CHECK(memcmp(image.data, pixels, sizeof(pixels)) == 0, "row png pixels");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_png_rows_callback_decode(void) {
+  static const uint8_t pixels[] = {
+      255u, 0u,   0u,   255u, 0u,   255u, 0u,   255u,
+      0u,   0u,   255u, 255u, 255u, 255u, 255u, 255u};
+  ni_image src = {2u, 2u, 4u, 8u, sizeof(pixels), (uint8_t *)pixels};
+  ni_buffer out;
+  test_row_sink sink;
+  char err[128] = {0};
+
+  memset(&sink, 0, sizeof(sink));
+  sink.row_stride = 8u;
+  CHECK(ni_write_png_to_memory(&src, &out, err, sizeof(err)), err);
+  CHECK(ni_load_png_rows_from_memory(out.data, out.size, test_png_row_sink,
+                                    &sink, err, sizeof(err)),
+        err);
+  CHECK(sink.rows_seen == 2u, "row decode count");
+  CHECK(memcmp(sink.rows, pixels, sizeof(pixels)) == 0, "row decode pixels");
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_write_png_fast_roundtrip(void) {
+  static uint8_t pixels[] = {
+      10u,  20u,  30u,  255u, 40u,  50u,  60u,  255u,
+      20u,  25u,  35u,  255u, 45u,  65u,  75u,  255u};
+  ni_png_write_options options = {NI_PNG_WRITE_FAST | NI_PNG_WRITE_REQUIRE_FAST,
+                                  -1};
+  ni_image src = {2u, 2u, 4u, 8u, sizeof(pixels), pixels};
+  ni_buffer out;
+  ni_image image;
+  char err[128] = {0};
+
+  CHECK(ni_write_png_to_memory_ex(&src, &options, &out, err, sizeof(err)), err);
+  CHECK(ni_load_png_from_memory(out.data, out.size, &image, err, sizeof(err)),
+        err);
+  CHECK(image.width == 2u && image.height == 2u, "fast png dimensions");
+  CHECK(image.channels == 4u && image.bit_depth == 8u, "fast png format");
+  CHECK(memcmp(image.data, pixels, sizeof(pixels)) == 0, "fast png pixels");
+  ni_image_free(&image);
+  ni_buffer_free(&out);
+  return 0;
+}
+
+static int test_write_png_rows_failure(void) {
+  static const uint8_t pixels[] = {
+      255u, 0u, 0u, 255u, 0u, 255u, 0u, 255u,
+      0u, 0u, 255u, 255u, 255u, 255u, 255u, 255u};
+  ni_image_info info = {2u, 2u, 4u, 8u, 8u};
+  test_row_source source = {pixels, 8u, 1};
+  ni_buffer out;
+  char err[128] = {0};
+
+  CHECK(!ni_write_png_rows_to_memory(&info, test_png_row_source, &source, NULL,
+                                     &out, err, sizeof(err)),
+        "row callback failure must fail");
+  CHECK(strstr(err, "row callback failed") != NULL, "row failure error");
+  return 0;
+}
+
 static int test_write_bmp_roundtrip(void) {
   static uint8_t pixel[] = {255u, 0u, 0u};
   ni_image src = {1u, 1u, 3u, 8u, sizeof(pixel), pixel};
@@ -790,6 +908,18 @@ int main(void) {
     return 1;
   }
   if (test_write_png_callback_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_png_rows_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_png_rows_callback_decode() != 0) {
+    return 1;
+  }
+  if (test_write_png_fast_roundtrip() != 0) {
+    return 1;
+  }
+  if (test_write_png_rows_failure() != 0) {
     return 1;
   }
   if (test_write_bmp_roundtrip() != 0) {

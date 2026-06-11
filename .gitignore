@@ -1,3 +1,4 @@
 /tests/test_nanoimage
 /.xmake
 /build
+*.o

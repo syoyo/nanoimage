@@ -15,6 +15,20 @@ typedef int (*ni_write_callback)(const uint8_t *data, size_t size,
                                  void *user_data);
 
 typedef struct {
+  uint32_t width;
+  uint32_t height;
+  uint8_t channels;
+  uint8_t bit_depth;
+  size_t row_stride;
+} ni_image_info;
+
+typedef int (*ni_row_source_callback)(uint32_t y, uint8_t *dst,
+                                      size_t dst_size, void *user_data);
+typedef int (*ni_row_sink_callback)(const ni_image_info *info, uint32_t y,
+                                    const uint8_t *src, size_t src_size,
+                                    void *user_data);
+
+typedef struct {
   ni_malloc_callback malloc_fn;
   ni_realloc_callback realloc_fn;
   ni_free_callback free_fn;

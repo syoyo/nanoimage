@@ -34,6 +34,12 @@ All writers support:
 
 - `ni_write_<format>()` for low-memory streaming output through a callback
 - `ni_write_<format>_to_memory()` for an allocator-owned `ni_buffer`
+- PNG also supports row callbacks:
+  - `ni_load_png_rows_from_memory()` emits decoded image rows to a callback
+  - `ni_write_png_rows()` and `ni_write_png_rows_to_memory()` read source rows
+    from a callback
+  - `ni_write_png_ex()` and `ni_write_png_to_memory_ex()` accept
+    `ni_png_write_options`, including opt-in `NI_PNG_WRITE_FAST`
 
 Use `ni_buffer_free()` to release buffers returned by `*_to_memory()`.
 
@@ -74,6 +80,28 @@ Run unit tests:
 ```bash
 xmake run nanoimage_test
 ```
+
+SIMD PNG helpers are off by default. Enable SSE2/SSE4.1/AVX/AVX2 helper builds
+with runtime CPUID dispatch using:
+
+```bash
+make test SIMD=1
+xmake f --simd=y && xmake run nanoimage_test
+```
+
+The full upstream custom Deflate codec bridge is also off by default. Enable it
+with:
+
+```bash
+make test CUSTOM_PNG_CODEC=1
+xmake f --custom_png_codec=y && xmake run nanoimage_test
+```
+
+This opt-in path compiles the local upstream sources from
+`/mnt/disk1/work/fpnge/fpnge.cc` for `NI_PNG_WRITE_FAST` encoding and
+`/mnt/disk1/work/fpng/src/fpng.cpp` for fpng-marked PNG decode fast paths. It
+requires runtime SSE4.1 support; otherwise nanoimage falls back to the built-in
+portable PNG paths unless `NI_PNG_WRITE_REQUIRE_FAST` is requested.
 
 ## Allocation hardening
 

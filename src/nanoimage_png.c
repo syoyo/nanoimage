@@ -1,6 +1,8 @@
 #include "nanoimage_png.h"
 
 #include "nanoimage_alloc_internal.h"
+#include "nanoimage_png_custom_internal.h"
+#include "nanoimage_simd_internal.h"
 #include "nanoimage_zlib.h"
 #include "nanoimage_zlib_internal.h"
 
@@ -100,6 +102,15 @@ static int ni_unfilter_row(uint8_t *row, const uint8_t *prev, size_t rowbytes,
   if (filter > 4u) {
     return 0;
   }
+  if (filter == 0u) {
+    return 1;
+  }
+  if (filter == 2u) {
+    if (prev != NULL) {
+      ni_row_add_u8(row, row, prev, rowbytes);
+    }
+    return 1;
+  }
   for (i = 0; i < rowbytes; i++) {
     const uint8_t src = row[i];
     const uint8_t left = (i >= bytes_per_pixel) ? row[i - bytes_per_pixel] : 0u;
@@ -107,12 +118,8 @@ static int ni_unfilter_row(uint8_t *row, const uint8_t *prev, size_t rowbytes,
     const uint8_t up_left =
         ((prev != NULL) && (i >= bytes_per_pixel)) ? prev[i - bytes_per_pixel] : 0u;
 
-    if (filter == 0u) {
-      row[i] = src;
-    } else if (filter == 1u) {
+    if (filter == 1u) {
       row[i] = (uint8_t)(src + left);
-    } else if (filter == 2u) {
-      row[i] = (uint8_t)(src + up);
     } else if (filter == 3u) {
       row[i] = (uint8_t)(src + ((uint8_t)(((uint16_t)left + (uint16_t)up) >> 1u)));
     } else {
@@ -173,6 +180,11 @@ int ni_load_png_from_memory(const uint8_t *bytes, size_t size, ni_image *out,
       (memcmp(bytes, k_png_signature, sizeof(k_png_signature)) != 0)) {
     ni_set_error(err, err_capacity, "invalid PNG signature");
     return 0;
+  }
+
+  if (ni_png_custom_codec_available() &&
+      ni_fpng_load_png_from_memory(bytes, size, out, err, err_capacity)) {
+    return 1;
   }
 
   off = sizeof(k_png_signature);
@@ -623,4 +635,40 @@ fail:
   ni_stbi_free(palette);
   ni_stbi_free(palette_alpha);
   return 0;
+}
+
+int ni_load_png_rows_from_memory(const uint8_t *bytes, size_t size,
+                                 ni_row_sink_callback row_fn, void *user_data,
+                                 char *err, size_t err_capacity) {
+  ni_image image;
+  ni_image_info info;
+  size_t row_stride;
+  uint32_t y;
+
+  if (row_fn == NULL) {
+    ni_set_error(err, err_capacity, "invalid row callback");
+    return 0;
+  }
+  if (!ni_load_png_from_memory(bytes, size, &image, err, err_capacity)) {
+    return 0;
+  }
+
+  row_stride = image.data_size / (size_t)image.height;
+  info.width = image.width;
+  info.height = image.height;
+  info.channels = image.channels;
+  info.bit_depth = image.bit_depth;
+  info.row_stride = row_stride;
+
+  for (y = 0u; y < image.height; y++) {
+    const uint8_t *row = image.data + (size_t)y * row_stride;
+    if (!row_fn(&info, y, row, row_stride, user_data)) {
+      ni_set_error(err, err_capacity, "row callback failed");
+      ni_image_free(&image);
+      return 0;
+    }
+  }
+
+  ni_image_free(&image);
+  return 1;
 }
