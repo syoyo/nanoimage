@@ -24,14 +24,21 @@ set_option maxHeartbeats 800000
 namespace NANO.C.Proofs
 open NANO NANO.C
 
-/-- `ni_bmp_header` returns `bmpHeaderCode`. -/
+/-- `ni_bmp_header` returns `bmpHeaderCode`; when the header succeeds, the
+    info object holds `bmpHeaderFinalBlock` (guarded on the spec-side stage
+    verdicts, which the caller supplies). -/
 theorem ni_bmp_header_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
     (size : Nat) (hs : size ≤ d.length) (hd : 54 ≤ d.length) (hlen : d.length < 2 ^ 64)
     (obl : List UInt8) (hob : m 3 = some obl) (h48 : obl.length = 48) (ro : Bool)
     (hro : ro = false) :
     ∃ s', ExS Gen.prog ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
       Gen.ni_bmp_header.body
-      (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' := by
+      (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' ∧
+      (sigOk size d = true → layoutOk size d = true → bmpGeometryCode d = 0 →
+       bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
+         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size = 0 →
+       bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0 →
+       ∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48) := by
   have h54 : 54 ≤ d.length := hd
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
@@ -128,9 +135,9 @@ theorem ni_bmp_header_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = som
       have hl6n : s6.locals 6 = some (.int ⟨32, false⟩ (rd32le d 46)) := rfl
       have hMem6 : s6.mem 3 = some obl := hob
       have hS6ro : s6.ro = false := hro
-      obtain ⟨s', hRem⟩ := ni_bmp_header_rem_exs s6 d bd hm size hs hd hlen obl hMem6 h48 hS6ro
+      obtain ⟨s', hRem, hRemMem⟩ := ni_bmp_header_rem_exs s6 d bd hm size hs hd hlen obl hMem6 h48 hS6ro
         hSig hLayout hl0n hl2n hl1n hl3n hl4n hl6n
-      refine ⟨s', ?_⟩
+      refine ⟨s', ?_, fun _ _ hg ha hp => hRemMem hg ha hp⟩
       show ExS Gen.prog ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
         Gen.ni_bmp_header.body (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s'
       exact ExS.seq hsig_skip (ExS.seq hlay_skip (ExS.seq hw3 (ExS.seq hw4 (ExS.seq hw6 hRem))))
@@ -149,7 +156,7 @@ theorem ni_bmp_header_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = som
             (.ret (some (.const (.int ⟨32, true⟩ 2)))) .skip)
           (.ret (some (.int ⟨32, true⟩ 2))) s0 :=
         ExS.ite hNot2 truthy_true (ExS.ret (EvE.const _))
-      refine ⟨s0, ?_⟩
+      refine ⟨s0, ?_, fun _ hlay _ _ _ => absurd hlay hLayout⟩
       show ExS Gen.prog ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
         Gen.ni_bmp_header.body (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s0
       rw [hbv]
@@ -168,7 +175,7 @@ theorem ni_bmp_header_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = som
         (.ret (some (.int ⟨32, true⟩ 1))) s0 :=
       ExS.ite hNot truthy_true (ExS.ret (EvE.const _))
     have hbv : bmpHeaderCode size d = 1 := bmpHeaderCode_one_of_not_sigOk size d hFalse
-    refine ⟨s0, ?_⟩
+    refine ⟨s0, ?_, fun hsig _ _ _ _ => absurd hsig hSig⟩
     show ExS Gen.prog ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
       Gen.ni_bmp_header.body (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s0
     rw [hbv]

@@ -222,6 +222,294 @@ def bmpDecode (d : List UInt8) : Except Nat (List UInt8) := do
   let h ← bmpHeader d.length d
   bmpPixels d h
 
+/-! ## Flattened output (used by the `ni_bmp_decode_into` refinement proof) -/
+
+/-- Bytes one output pixel expands to. -/
+def bmpPixelSize (h : BmpInfo) : Nat := if h.bitCount = 8 then 3 else h.channels
+
+/-- Bytes per output row. -/
+def bmpRowSize (h : BmpInfo) : Nat := h.width * bmpPixelSize h
+
+/-- Flattened bytes of output row `y` (`[]` for pixels whose decode failed). -/
+def bmpRowBytes (d : List UInt8) (h : BmpInfo) (y : Nat) : List UInt8 :=
+  (List.range h.width).flatMap fun x =>
+    match bmpPixel d h y x with
+    | .ok bs => bs
+    | .error _ => []
+
+/-- Flattened bytes of the first `y` output rows. -/
+def bmpRowsBytes (d : List UInt8) (h : BmpInfo) (y : Nat) : List UInt8 :=
+  (List.range y).flatMap (bmpRowBytes d h)
+
+/-- `bmpRowsBytes` peels one row off the back. -/
+theorem bmpRowsBytes_succ (d : List UInt8) (h : BmpInfo) (y : Nat) :
+    bmpRowsBytes d h (y + 1) = bmpRowsBytes d h y ++ bmpRowBytes d h y := by
+  unfold bmpRowsBytes
+  rw [List.range_succ, List.flatMap_append, List.flatMap_singleton]
+
+theorem bmpRowsBytes_zero (d : List UInt8) (h : BmpInfo) :
+    bmpRowsBytes d h 0 = [] := rfl
+
+/-- Length of a row: `h.width` pixels of `bmpPixelSize h` bytes each. -/
+theorem bmpRowBytes_length (d : List UInt8) (h : BmpInfo) (y : Nat)
+    (hok : ∀ x, x < h.width → ∃ bs, bmpPixel d h y x = .ok bs)
+    (hlen : ∀ x bs, bmpPixel d h y x = .ok bs → bs.length = bmpPixelSize h) :
+    (bmpRowBytes d h y).length = bmpRowSize h := by
+  unfold bmpRowBytes bmpRowSize
+  rw [List.length_flatMap]
+  rw [List.map_congr_left (g := fun _ => bmpPixelSize h) (l := List.range h.width)]
+  · rw [List.map_const', List.length_range, List.sum_replicate_nat]
+  · intro x hx
+    have hx' : x < h.width := by
+      rw [List.mem_range] at hx; exact hx
+    obtain ⟨bs, hbs⟩ := hok x hx'
+    simp [hbs, hlen x bs hbs]
+
+/-- Length of the first `y` rows. -/
+theorem bmpRowsBytes_length (d : List UInt8) (h : BmpInfo) (y : Nat)
+    (hy : y ≤ h.height)
+    (hok : ∀ yy x, yy < y → x < h.width → ∃ bs, bmpPixel d h yy x = .ok bs)
+    (hlen : ∀ yy x bs, bmpPixel d h yy x = .ok bs → bs.length = bmpPixelSize h) :
+    (bmpRowsBytes d h y).length = y * bmpRowSize h := by
+  induction y with
+  | zero => simp [bmpRowsBytes]
+  | succ k ih =>
+    rw [bmpRowsBytes_succ, List.length_append, ih (by omega)
+      (fun yy x hyy hx => hok yy x (by omega) hx)]
+    rw [bmpRowBytes_length d h k (fun x hx => hok k x (by omega) hx)
+      (fun x bs hbs => hlen k x bs hbs)]
+    rw [Nat.add_mul, Nat.one_mul]
+
+/-- Bytes one pixel expands to, bounded by the header's channel count. -/
+theorem bmpPixelSize_le (h : BmpInfo) (hc : h.channels ≤ 4) : bmpPixelSize h ≤ 4 := by
+  unfold bmpPixelSize
+  split
+  · omega
+  · assumption
+
+
+/-! ## Byte-level bridge lemmas (used by the `ni_bmp_decode_into` proof) -/
+
+/-- `byteAt` round-trips to the byte in the list. -/
+theorem byteAt_toUInt8 (d : List UInt8) (i : Nat) :
+    (byteAt d i).toUInt8 = d.getD i 0 := by
+  unfold byteAt
+  simp
+
+/-- The output expansion list of one 8-bit palette pixel. -/
+theorem bmpPixel_palette (d : List UInt8) (h : BmpInfo) (y x : Nat)
+    (hd8 : h.bitCount = 8)
+    (hidx : byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) < h.paletteEntries) :
+    bmpPixel d h y x =
+      .ok [d.getD (h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) * 4 + 2) 0,
+           d.getD (h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) * 4 + 1) 0,
+           d.getD (h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) * 4) 0] := by
+  unfold bmpPixel
+  rw [ite_eq_left hd8]
+  dsimp only
+  by_cases hge : byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) ≥ h.paletteEntries
+  · exact absurd hge (by omega)
+  · simp only [hge]
+    rfl
+
+/-- Prefix decomposition of `range`-`flatMap`. -/
+theorem flatMap_range_prefix (f : Nat → List UInt8) (n : Nat) :
+    ∀ m, m ≤ n → (List.range n).flatMap f =
+      (List.range m).flatMap f ++ (List.range (n - m)).flatMap (fun i => f (m + i)) := by
+  induction n with
+  | zero =>
+      intro m h
+      have : m = 0 := by omega
+      rw [this]
+      simp
+  | succ k ih =>
+      intro m h
+      by_cases hmk : m ≤ k
+      · rw [List.range_succ, List.flatMap_append, ih m hmk]
+        have e : k + 1 - m = (k - m) + 1 := by omega
+        rw [e, List.range_succ, List.flatMap_append, List.flatMap_singleton, List.flatMap_singleton]
+        have e2 : m + (k - m) = k := by omega
+        rw [e2, ← List.append_assoc]
+      · have hmk' : m = k + 1 := by omega
+        rw [hmk']
+        simp [List.range_succ]
+
+
+/-- `flatten` of `map f` is `flatMap f`. -/
+theorem flatten_map' {α β : Type} (f : α → List β) (l : List α) :
+    (l.map f).flatten = l.flatMap f := by
+  rw [List.flatten_eq_flatMap, List.flatMap_map]
+  rfl
+
+/-- `flatten` of `flatMap f` is `flatMap (flatten ∘ f)`. -/
+theorem flatten_flatMap' {α β : Type} (f : α → List (List β)) (l : List α) :
+    (l.flatMap f).flatten = l.flatMap (fun a => (f a).flatten) := by
+  rw [List.flatMap, List.flatten_flatten, List.map_map]
+  rfl
+
+/-- One output row decodes successfully iff every pixel does; in that case the
+    row decodes to the list of pixel expansions. -/
+theorem mapM_row_ok (d : List UInt8) (h : BmpInfo) (y : Nat) (n : Nat)
+    (hok : ∀ x, x < n → ∃ bs, bmpPixel d h y x = .ok bs) :
+    (List.range n).mapM (fun x => bmpPixel d h y x)
+      = Except.ok ((List.range n).map fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => []) := by
+  induction n with
+  | zero => rfl
+  | succ k ih =>
+      rw [List.range_succ, List.mapM_append, List.mapM_cons]
+      rw [ih (fun x hx => hok x (by omega))]
+      obtain ⟨bs, hbs⟩ := hok k (by omega)
+      rw [List.map_append, List.map_cons, List.map_nil]
+      rw [hbs]
+      rfl
+
+theorem mapM_row (d : List UInt8) (h : BmpInfo) (y : Nat)
+    (hok : ∀ x, x < h.width → ∃ bs, bmpPixel d h y x = .ok bs) :
+    (List.range h.width).mapM (fun x => bmpPixel d h y x)
+      = Except.ok ((List.range h.width).map fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => []) :=
+  mapM_row_ok d h y h.width hok
+
+/-- All output rows decode successfully iff every pixel does. -/
+theorem mapM_rows_ok (d : List UInt8) (h : BmpInfo) (n : Nat)
+    (hok : ∀ y x, y < n → x < h.width → ∃ bs, bmpPixel d h y x = .ok bs) :
+    (List.range n).mapM (fun y => (List.range h.width).mapM fun x => bmpPixel d h y x)
+      = Except.ok ((List.range n).map fun y => (List.range h.width).map fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => []) := by
+  induction n with
+  | zero => rfl
+  | succ k ih =>
+      rw [List.range_succ, List.mapM_append, List.mapM_cons]
+      rw [ih (fun y x hy hx => hok y x (by omega) hx)]
+      rw [mapM_row d h k (fun x hx => hok k x (by omega) hx)]
+      rw [List.map_append, List.map_cons, List.map_nil]
+      rfl
+
+/-- The output expansion of one direct (BGR or BGRA) pixel. -/
+theorem bmpPixel_direct (d : List UInt8) (h : BmpInfo) (y x : Nat)
+    (hn8 : h.bitCount ≠ 8) :
+    bmpPixel d h y x =
+      (if h.channels = 4 then
+         .ok ([d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 2) 0,
+               d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 1) 0,
+               d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 0) 0,
+               d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 3) 0])
+       else
+         .ok ([d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 2) 0,
+               d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 1) 0,
+               d.getD (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x * (if h.bitCount = 32 then 4 else 3) + 0) 0])) := by
+  unfold bmpPixel
+  rw [ite_eq_right hn8]
+  dsimp only
+  rfl
+
+/-- `bmpPixels` flattens to the concatenated row bytes when every pixel decodes. -/
+theorem bmpPixels_eq_rowsBytes (d : List UInt8) (h : BmpInfo)
+    (hok : ∀ y x, y < h.height → x < h.width → ∃ bs, bmpPixel d h y x = .ok bs) :
+    bmpPixels d h = .ok (bmpRowsBytes d h h.height) := by
+  unfold bmpPixels bmpRowsBytes bmpRowBytes
+  rw [mapM_rows_ok d h h.height hok]
+  show ((Except.ok ((List.range h.height).map fun y => (List.range h.width).map fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => [])).bind (fun rows => Except.ok rows.flatten.flatten)) =
+      Except.ok ((List.range h.height).flatMap fun y => (List.range h.width).flatMap fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => [])
+  show Except.ok ((List.range h.height).map fun y => (List.range h.width).map fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => []).flatten.flatten =
+      Except.ok ((List.range h.height).flatMap fun y => (List.range h.width).flatMap fun x => match bmpPixel d h y x with | .ok bs => bs | .error _ => [])
+  congr 1
+  simp only [flatten_map', flatten_flatMap']
+
+
+/-- The flattened bytes of pixels `0..n-1` of row `y`. -/
+def rowOut (d : List UInt8) (h : BmpInfo) (y n : Nat) : List UInt8 :=
+  (List.range n).flatMap fun i => match bmpPixel d h y i with | .ok bs => bs | .error _ => []
+
+/-- Length of a pixel-prefix of a row's bytes. -/
+theorem rowOut_length (d : List UInt8) (h : BmpInfo) (y n : Nat)
+    (hok : ∀ i, i < n → ∃ bs, bmpPixel d h y i = .ok bs)
+    (hlen : ∀ i bs, bmpPixel d h y i = .ok bs → bs.length = bmpPixelSize h) :
+    (rowOut d h y n).length = n * bmpPixelSize h := by
+  unfold rowOut
+  rw [List.length_flatMap]
+  rw [List.map_congr_left (g := fun _ => bmpPixelSize h) (l := List.range n)]
+  · rw [List.map_const', List.length_range, List.sum_replicate_nat]
+  · intro x hx
+    rw [List.mem_range] at hx
+    obtain ⟨bs, hbs⟩ := hok x hx
+    rw [hbs]
+    exact hlen x bs hbs
+
+/-- First `n` pixels of a row as bytes, appended to a prefix (`flatMap_range_prefix`
+    specialized to `bmpPixel`). -/
+theorem rowOut_prefix (d : List UInt8) (h : BmpInfo) (y n m : Nat)
+    (hmn : m ≤ n) :
+    (List.range n).flatMap (fun i => match bmpPixel d h y i with | .ok bs => bs | .error _ => [])
+      = rowOut d h y m ++ (List.range (n - m)).flatMap (fun i => match bmpPixel d h y (m + i) with | .ok bs => bs | .error _ => []) := by
+  apply flatMap_range_prefix
+  exact hmn
+
+
+/-- A row's full output bytes, as a pixel-prefix. -/
+theorem rowOut_width (d : List UInt8) (h : BmpInfo) (y : Nat) :
+    rowOut d h y h.width = bmpRowBytes d h y := rfl
+
+
+/-- An 8-bit pixel that decoded successfully has an in-range palette index. -/
+theorem bmpPixel_idx_lt_entries_of_ok (d : List UInt8) (h : BmpInfo) (y x : Nat)
+    (hd8 : h.bitCount = 8) (bs : List UInt8)
+    (hbs : bmpPixel d h y x = .ok bs) :
+    byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) < h.paletteEntries := by
+  by_cases hge : byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) ≥ h.paletteEntries
+  · have herr : bmpPixel d h y x = .error 11 := by
+      unfold bmpPixel
+      rw [ite_eq_left hd8]
+      dsimp only
+      rw [ite_eq_left (by omega : byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) ≥ h.paletteEntries)]
+      rfl
+    rw [herr] at hbs
+    exact absurd hbs (by simp)
+  · omega
+
+/-- A successful 8-bit pixel expands to exactly `bmpPixelSize h` bytes. -/
+theorem bmpPixel_8bit_length (d : List UInt8) (h : BmpInfo) (y x : Nat)
+    (hd8 : h.bitCount = 8) (bs : List UInt8)
+    (hbs : bmpPixel d h y x = .ok bs) :
+    bs.length = bmpPixelSize h := by
+  have hidx := bmpPixel_idx_lt_entries_of_ok d h y x hd8 bs hbs
+  have := bmpPixel_palette d h y x hd8 hidx
+  rw [this] at hbs
+  have h_eq : bs = [d.getD (h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) * 4 + 2) 0,
+               d.getD (h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) * 4 + 1) 0,
+               d.getD (h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) * 4) 0] :=
+    Except.ok.inj hbs.symm
+  simp [h_eq, bmpPixelSize, hd8]
+
+/-- An in-bounds 8-bit palette index forces the pixel to decode. -/
+theorem bmpPixel_8bit_ok (d : List UInt8) (h : BmpInfo) (y x : Nat) (hd8 : h.bitCount = 8)
+    (hidx : byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) < h.paletteEntries) :
+    ∃ bs, bmpPixel d h y x = .ok bs := by
+  unfold bmpPixel
+  rw [ite_eq_left hd8]
+  dsimp only
+  by_cases hge : byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + x) ≥ h.paletteEntries
+  · exact absurd hge (by omega)
+  · rw [ite_eq_right hge]
+    exact ⟨[d.getD _ 0, d.getD _ 0, d.getD _ 0], rfl⟩
+
+/-- A successful direct (24/32-bit) pixel expands to exactly `bmpPixelSize h` bytes. -/
+theorem bmpPixel_direct_length (d : List UInt8) (h : BmpInfo) (y x : Nat)
+    (hn8 : h.bitCount ≠ 8) (hc : h.channels = 3 ∨ h.channels = 4) (bs : List UInt8)
+    (hbs : bmpPixel d h y x = .ok bs) :
+    bs.length = bmpPixelSize h := by
+  unfold bmpPixel at hbs
+  rw [ite_eq_right hn8] at hbs
+  by_cases hc4 : h.channels = 4
+  · simp only [hc4, ite_true] at hbs
+    injection hbs with hlist
+    rw [← hlist]
+    simp [bmpPixelSize, hn8, hc4]
+  · have hc3 : h.channels = 3 := by
+      cases hc with
+      | inl h3 => exact h3
+      | inr h4 => exact absurd h4 hc4
+    simp only [hc4, ite_false] at hbs
+    injection hbs with hlist
+    rw [← hlist]
+    simp [bmpPixelSize, hn8, hc3]
+
 end NANO
-
-

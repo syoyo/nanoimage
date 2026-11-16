@@ -36,7 +36,16 @@ No `native_decide`, no `bv_decide`.
 | 2 | BMP layout check `ni_bmp_layout_ok` (pixel offset and DIB size guards) | proven (`NANO/C/Proofs/Bmp.lean`) |
 | 2 | `bmpHeaderCode_one_of_not_sigOk` and `sigOk_guard_false_of_sigOk` (spec helpers behind the header rejects) | proven (`NANO/C/Proofs/NiBmpHeaderSpec.lean`, `NANO/C/Proofs/NiBmpHeaderSpecSig1.lean`) |
 | 2 | BMP refinement proof for `ni_bmp_header` (`ni_bmp_header_exs`): mem survives all stores, returns `bmpHeaderCode size d`; sig/layout/geometry/arith/palette stages all split into standalone lemmas (`NiBmpHeaderCompose.lean`) | proven — axioms `propext`/`Classical.choice`/`Quot.sound` |
-| 2 | BMP refinement proofs for `ni_bmp_decode_into` | **not yet** |
+| 2 | BMP refinement proof for `ni_bmp_decode_raw_pixel` (`ni_bmp_decode_raw_pixel_exs`, `NiBmpDecode.lean`): BGR(A) splice of 3–4 palette-expansion bytes, channels branch for 4-byte alpha; byte-level bridge lemmas (`splice_enc_*`, `byteAt_toUInt8`, `encodeLE_one_byteAt`) | proven — axioms `propext`/`Classical.choice`/`Quot.sound` |
+| 2 | BMP refinement proof for `ni_bmp_decode_indexed_pixel` (`ni_bmp_decode_indexed_pixel_ok_exs` returns 0 and writes BGR from palette in-range; `ni_bmp_decode_indexed_pixel_err_exs` returns 11 and writes nothing out-of-range; both export `s'.mem bd = some d` and `s'.mem 2 = m 2` for loop composition) | proven — axioms `propext`/`Classical.choice`/`Quot.sound` |
+| 2 | BMP refinement proof for the inner 8-bit/row decode loop (`loop0_iter` induction over `h.width - x` in `NiBmpLoop.lean`; terminates at `.brk` at `width` with `y+1` rows stored; `ni_bmp_decode_into_loop0_ok_exs` wrapper) | proven — axioms `propext`/`Classical.choice`/`Quot.sound` |
+| 2 | Spec bridge lemmas for the decode proof (`flatMap_range_prefix`, `flatten_map'`, `flatten_flatMap'`, `rowOut`/`rowOut_width`/`rowOut_length`/`rowOut_prefix`, `bmpPixel_palette`, `bmpPixel_direct`, `bmpPixel_8bit_length`, `bmpPixel_8bit_ok`, `bmpPixel_idx_lt_entries_of_ok`, `bmpPixels_eq_rowsBytes`, `mapM_row_ok`, `mapM_rows_ok`, `bmpRowsBytes_succ_flat`; in `Bmp.lean`) | proven |
+| 2 | BMP refinement proofs for `ni_bmp_decode_into` (outer y-loop, 24/32-bit direct loops, and the `bit_count == 8` vs else split) | **proven** (`ni_bmp_decode_into_ok_exs`, `NiBmpDecodeInto.lean` — all-pixels-OK case, axioms `propext`/`Classical.choice`/`Quot.sound`; the composition consumes `loop1_iter`/`loop3_iter` directly with pointwise state hypotheses) |
+| 2 | `ExS.call_ret` (statement-level call of a value-returning function: result discarded, caller continues; in `Logic.lean`) | proven |
+| 2 | Header info-block exports: `bmpHeadBlock`/`bmpHeaderFinalBlock` constructors, `header_stores_exs` memory export, guarded exports through `ni_bmp_header_rem_stores_exs` / `ni_bmp_header_rem_exs` / `ni_bmp_header_exs` (success ⇒ info object holds `bmpHeaderFinalBlock d gout`) | proven (`NiBmpHeaderCompose.lean`, `NiBmpHeader.lean`) |
+| 2 | Final-info-block field slices (10 fields + length), layered per store stage (`arithBlock_*`, `palBlock_*`, `headBlock_*`) | proven (`NiBmpLoad.lean`) |
+| 2 | Spec witness + reconstruction: `bmpHeaderInfoOf d`, `bmpHeader_ok_of_stages` (five stage verdicts ⇒ `bmpHeader size d = .ok (bmpHeaderInfoOf d)`, via `bmpOutputCompose_ok_8`/`_ne8`) | proven (`NiBmpLoad.lean`) |
+| 2 | Composition `ni_bmp_load_exs` (header fid 15 then decode fid 16, as the shell runs them) | **in progress** — remaining: restate `ni_bmp_decode_into_ok_exs` over the 5-param call frame (drop the over-strong `locals 25 = some 0` invariant from `loop2_iter`/`loop3_iter`; local 25 is write-before-read), then assemble with `ExS.call_dst`/`ExS.call_ret` |
 | 2 | `ni_bmp_geometry_readers` proven (closed-form state with locals 3..7 set) | done |
 | 2 | `ni_bmp_mul_fits_exs` proven | done |
 | 2 | `ni_bmp_geometry_exs` reject-3 by_cases (widthI<=0, hI=0, planes!=1 → ret3) | done |
@@ -116,6 +125,15 @@ local kernel's depth/heartbeat budget:
 * `NANO.C.Proofs.NiGeometryPos` — `ni_bmp_geometry_readers`,
   `ni_bmp_geometry_exs_pos`, `ni_bmp_geometry_exs_neg_intmin`.
 * `NANO.C.Proofs.NiGeometryNegNormal` — `ni_bmp_geometry_exs_neg_normal`.
+* `NANO.C.Proofs.NiBmpDecode` — the per-pixel decode proofs
+  (`ni_bmp_decode_raw_pixel_exs`, `ni_bmp_decode_indexed_pixel_{ok,err}_exs`),
+  plus `mem_upd_other`, `mem_upd_eq`, `mem_upd_neq` and the
+  `splice_enc_*` splice normalizations.
+* `NANO.C.Proofs.NiBmpLoop` — parameterized field-load lemmas
+  (`load_u{8,16,32,64}_field` on arbitrary blocks), the `loop0_iter`
+  induction over the 8-bit inner row loop and the
+  `ni_bmp_decode_into_loop0_ok_exs` wrapper; `ExS.loop_next`'s local-state
+  invariant is threaded through `locals_upd_extract` chains.
 
 Kernel notes (no `unsafe`, no `native_decide`):
 
@@ -133,15 +151,28 @@ Kernel notes (no `unsafe`, no `native_decide`):
 ## Known gaps and boundaries
 
 * Phase 1 is complete: all helpers listed above are proven.
-* Phase 2 has the BMP core, spec, differential gate, and the geometry check
-  proven end-to-end: `ni_bmp_geometry_exs` covers all sign branches of
-  `height_i` (`POS`, `INT32_MIN`, `NEG-normal`) and the composite verdict
-  used by the differential gate. `ni_bmp_header_exs` is now proven end-to-end
-  as well (sig, layout, readers, geometry, arith, palette, stores) — axioms
-  `[propext, Classical.choice, Quot.sound]`. The rest of the loading path —
-  `ni_bmp_decode_into` (nested loops writing the output block) — is not
-  proven yet. Until that lands, BMP is differentially tested at its last mile:
-  the header decomposition is verified, the decode loop is not.
+* Phase 2 has the BMP core, spec, differential gate, geometry check, header,
+  per-pixel helpers, all four decode loops, and the top-level decode
+  composition proven end-to-end: `ni_bmp_decode_into_ok_exs`
+  (`NiBmpDecodeInto.lean`) covers the all-pixels-OK case of
+  `ni_bmp_decode_into` — no UB, returns 0, and the output block holds the
+  flattened `bmpRowsBytes` bytes — with axioms
+  `[propext, Classical.choice, Quot.sound]`. The proof consumes
+  `loop1_iter`/`loop3_iter` directly (pointwise state hypotheses), so no
+  frame-bridging was needed.
+* Header/decode composition (`ni_bmp_load_exs`, `NiBmpLoad.lean`): the
+  header-side exports are proven (the info object holds `bmpHeaderFinalBlock`
+  after a successful `ni_bmp_header`, with all ten field encodings derived,
+  and `bmpHeader_ok_of_stages` reconstructs the spec verdict), and
+  `ExS.call_ret` composes value-returning statement calls. The remaining
+  step is restating `ni_bmp_decode_into_ok_exs` over the 5-parameter call
+  frame: the loop iter theorems carry an over-strong
+  `locals 25 = some 0` invariant (local 25 is written before it is ever
+  read), which a fresh call frame — where locals ≥ 5 are unbound — cannot
+  supply. Dropping that invariant from `loop2_iter`/`loop3_iter` and
+  restating the decode theorem is mechanical; the composite assembly
+  (`ExS.call_dst` for the header call, the verdict `ite`, `ExS.call_ret`
+  for the decode call) is already specified.
 * `ni_bmp_header_exs` composition note: the final theorem was assembled only
   after factoring the whole post-reader pipeline into standalone lemmas,
   because the monolithic term deep-recursed the Lean kernel even at

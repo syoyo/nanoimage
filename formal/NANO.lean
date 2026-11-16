@@ -28,4 +28,11 @@ import NANO.C.Proofs.NiBmpHeaderPalette
 import NANO.Bmp
 import NANO.C.Proofs.Bmp
 import NANO.C.Proofs.NiBmpHeaderSpecPalette
+import NANO.C.Proofs.NiBmpDecode
+import NANO.C.Proofs.NiBmpLoop
+import NANO.C.Proofs.NiBmpLoop2
+import NANO.C.Proofs.NiBmpLoop4
+import NANO.C.Proofs.NiBmpLoop5
+import NANO.C.Proofs.NiBmpDecodeInto
+import NANO.C.Proofs.NiBmpLoad
 

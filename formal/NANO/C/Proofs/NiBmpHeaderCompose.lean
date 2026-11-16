@@ -29,9 +29,39 @@ set_option maxHeartbeats 8000000
 namespace NANO.C.Proofs
 open NANO NANO.C
 
-/-- Six stores into the 48-byte `ni_bmp_info` block (width@24, height@28,
-    pixel_offset@32, bit_count@40, channels@42, top_down@43), ending in
-    `ret 0`. -/
+/-- The 48-byte `ni_bmp_info` block after the six tail stores
+    (width@24, height@28, pixel_offset@32, bit_count@40, channels@42,
+    top_down@43). Bytes 36..39 are preserved from the input (the palette
+    stage stored `palette_entries` there), as are 0..23 and 44..47. -/
+def bmpHeadBlock (obl : List UInt8) (w h po b c t : Nat) : List UInt8 :=
+  obl.take 24 ++ encodeLE 4 w ++ encodeLE 4 h ++ encodeLE 4 po ++
+  (obl.drop 36).take 4 ++ encodeLE 2 b ++ encodeLE 1 c ++ encodeLE 1 t ++ obl.drop 44
+
+theorem bmpHeadBlock_length (obl : List UInt8) (h48 : obl.length = 48) (w h po b c t : Nat) :
+    (bmpHeadBlock obl w h po b c t).length = 48 := by
+  have e4 : ∀ n : Nat, (encodeLE 4 n).length = 4 := encodeLE_length 4
+  have e2 : (encodeLE 2 b).length = 2 := encodeLE_length 2 b
+  have e1c : (encodeLE 1 c).length = 1 := encodeLE_length 1 c
+  have e1t : (encodeLE 1 t).length = 1 := encodeLE_length 1 t
+  simp [bmpHeadBlock, h48, e4, e2, e1c, e1t, List.length_take, List.length_append,
+    List.length_drop]
+
+/-- The full 48-byte `ni_bmp_info` block a successful `ni_bmp_header` leaves in
+    the info object: arith (row_stride@0, output_size@8), palette
+    (palette_offset@16, palette_entries@36) and tail (width@24, height@28,
+    pixel_offset@32, bit_count@40, channels@42, top_down@43) stores applied to
+    the geometry stage's output block. -/
+def bmpHeaderFinalBlock (d gout : List UInt8) : List UInt8 :=
+  bmpHeadBlock
+    (bmpPaletteBlock (bmpArithBlock gout (bmpRowStride (rd32le d 18) (rd16le d 28))
+        (bmpOutSize (rd32le d 18) (if rd16le d 28 = 32 then 4 else 3)
+          ((NANO.toInt32 (rd32le d 22)).natAbs)))
+      (if rd16le d 28 = 8 then 14 + rd32le d 14 else 0)
+      (if rd16le d 28 = 8 then (if rd32le d 46 = 0 then 256 else rd32le d 46) else 0))
+    (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd32le d 10)
+    (rd16le d 28) (if rd16le d 28 = 32 then 4 else 3)
+    (if NANO.toInt32 (rd32le d 22) < 0 then 1 else 0)
+
 theorem header_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h48 : obl.length = 48)
     (ro : Bool) (hro : ro = false)
     (l : Locals) (hl2 : l 2 = some (.ptr 3 0))
@@ -46,9 +76,10 @@ theorem header_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h
       (.seq (.store (.int ⟨32, false⟩) (.field (.var 2) 32) (.var 3))
       (.seq (.store (.int ⟨16, false⟩) (.field (.var 2) 40) (.var 5))
       (.seq (.store (.int ⟨8, false⟩) (.field (.var 2) 42) (.var 9))
-            (.seq (.store (.int ⟨8, false⟩) (.field (.var 2) 43) (.var 10))
+      (.seq (.store (.int ⟨8, false⟩) (.field (.var 2) 43) (.var 10))
                   (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0))))))))))
-      (Outcome.ret (some (.int ⟨32, true⟩ 0))) s' := by
+      (Outcome.ret (some (.int ⟨32, true⟩ 0))) s' ∧
+    s'.mem 3 = some (bmpHeadBlock obl w h po b c t) := by
   have h2 : EvE Gen.prog ⟨l, m, ro⟩ (.var 2) (.ptr 3 0) := EvE.var hl2
   have h7 : EvE Gen.prog ⟨l, m, ro⟩ (.var 7) (.int ⟨32, false⟩ w) := EvE.var hl7
   have h8 : EvE Gen.prog ⟨l, m, ro⟩ (.var 8) (.int ⟨32, false⟩ h) := EvE.var hl8
@@ -123,10 +154,16 @@ theorem header_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h
       { s5 with mem := (((((m.upd 3 b1).upd 3 b2).upd 3 b3).upd 3 b4).upd 3 b5).upd 3 (b5.take 43 ++ encodeLE 1 t ++ b5.drop 44) } :=
     ExS.store hr43 h10s5 hro (store_field_u8 _ 3 b5 h2m5 hb5 43 (by omega) t ht)
   let s6 : State := { s5 with mem := (((((m.upd 3 b1).upd 3 b2).upd 3 b3).upd 3 b4).upd 3 b5).upd 3 (b5.take 43 ++ encodeLE 1 t ++ b5.drop 44) }
+  have hMem6 : s6.mem 3 = some (b5.take 43 ++ encodeLE 1 t ++ b5.drop 44) := rfl
+  have hFinal : (b5.take 43 ++ encodeLE 1 t ++ b5.drop 44) = bmpHeadBlock obl w h po b c t := by
+    simp [b1, b2, b3, b4, b5, bmpHeadBlock, h48, encodeLE_length, List.length_take,
+      List.length_drop, List.length_append, List.take_append, List.drop_append,
+      List.drop_of_length_le, List.take_of_length_le, List.nil_append, List.append_nil]
   have hret : ExS Gen.prog s6 (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0))))
       (Outcome.ret (some (.int ⟨32, true⟩ 0))) s6 :=
     ExS.ret (EvE.const (v := (.int ⟨32, true⟩ 0)))
-  exact ⟨s6, ExS.seq hW (ExS.seq hH (ExS.seq hP (ExS.seq hBP (ExS.seq hCH (ExS.seq hTD hret)))))⟩
+  refine ⟨s6, ExS.seq hW (ExS.seq hH (ExS.seq hP (ExS.seq hBP (ExS.seq hCH (ExS.seq hTD hret))))), ?_⟩
+  rw [hMem6, hFinal]
 
 end NANO.C.Proofs
 
@@ -802,7 +839,8 @@ theorem ni_bmp_header_rem_stores_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
     (hAcr : bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size = 0)
     (hPcr : bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0) :
-    ∃ s', ExS Gen.prog s6 ni_bmp_header_rem_stmt (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' := by
+    ∃ s', ExS Gen.prog s6 ni_bmp_header_rem_stmt (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' ∧
+      ∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48 := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   obtain ⟨gout, s12, hP, hg_len, hob'12, hHb, hWle, hBl, hCh,
@@ -928,12 +966,12 @@ theorem ni_bmp_header_rem_stores_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
       (if rd16le d 28 = 8 then 14 + rd32le d 14 else 0)
       (if rd16le d 28 = 8 then (if rd32le d 46 = 0 then 256 else rd32le d 46) else 0)).length = 48 :=
     bmpPaletteBlock_length _ (bmpArithBlock_length gout hg_len _ _) _ _
-  obtain ⟨s', hStores⟩ := header_stores_exs s14.mem _ hBlockFin hBkLen2 s14.ro hS14ro s14.locals hl2_14
+  obtain ⟨s', hStores, hStoresMem⟩ := header_stores_exs s14.mem _ hBlockFin hBkLen2 s14.ro hS14ro s14.locals hl2_14
     (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd32le d 10)
     (rd32_lt d 18) (by omega) (rd32_lt d 10)
     (rd16le d 28) (if rd16le d 28 = 32 then 4 else 3) (if NANO.toInt32 (rd32le d 22) < 0 then 1 else 0)
     (rd16le_lt d 28) (by omega) (by by_cases h : NANO.toInt32 (rd32le d 22) < 0 <;> simp [h]) hl7_14 hl8_14 hl3_14 hl5_14 hl9_14 hl10_14
-  refine ⟨s', ?_⟩
+  refine ⟨s', ?_, ⟨gout, hStoresMem, hg_len⟩⟩
   show ExS Gen.prog s6 ni_bmp_header_rem_stmt (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s'
   rw [hSpec]
   have h12skipV12 : EvE Gen.prog s13
@@ -1148,19 +1186,32 @@ theorem ni_bmp_header_rem_exs (s6 : State) (d : List UInt8) (bd : Nat) (hm : s6.
     (hl4 : s6.locals 4 = some (.int ⟨32, false⟩ (rd32le d 14)))
     (hl6 : s6.locals 6 = some (.int ⟨32, false⟩ (rd32le d 46))) :
     ∃ s', ExS Gen.prog s6 ni_bmp_header_rem_stmt
-      (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' := by
+      (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' ∧
+      (bmpGeometryCode d = 0 →
+       bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
+         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size = 0 →
+       bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0 →
+       ∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48) := by
   classical
   by_cases hG0 : bmpGeometryCode d = 0
   · by_cases hAcr : (bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size) = 0
     · by_cases hPcr : (bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10)) = 0
-      · exact ni_bmp_header_rem_stores_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
-          hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr hPcr
-      · exact ni_bmp_header_rem_palette_bad_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
-          hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr hPcr
-    · exact ni_bmp_header_rem_arith_fail_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
-        hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr
-  · exact ni_bmp_header_rem_geom_fail_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
-      hl0 hl2 hl1 hl3 hl4 hl6 hG0
+      · obtain ⟨s', hEx, ⟨gout, hMem, hglen⟩⟩ :=
+          ni_bmp_header_rem_stores_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
+            hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr hPcr
+        exact ⟨s', hEx, fun _ _ _ => ⟨gout, hMem, hglen⟩⟩
+      · obtain ⟨s', hEx⟩ :=
+          ni_bmp_header_rem_palette_bad_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
+            hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr hPcr
+        exact ⟨s', hEx, fun _ _ hp => absurd hp hPcr⟩
+    · obtain ⟨s', hEx⟩ :=
+        ni_bmp_header_rem_arith_fail_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
+          hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr
+      exact ⟨s', hEx, fun _ ha _ => absurd ha hAcr⟩
+  · obtain ⟨s', hEx⟩ :=
+      ni_bmp_header_rem_geom_fail_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
+        hl0 hl2 hl1 hl3 hl4 hl6 hG0
+    exact ⟨s', hEx, fun hg _ _ => absurd hg hG0⟩
 
 end NANO.C.Proofs

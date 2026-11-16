@@ -175,6 +175,31 @@ int ni_bmp_header(const uint8_t *bytes, size_t size, ni_bmp_info *info) {
   return NI_BMP_OK;
 }
 
+static int ni_bmp_decode_indexed_pixel(const uint8_t *bytes, uint8_t *out,
+                                       size_t src_base, size_t x, size_t dst,
+                                       size_t palette_offset, size_t palette_entries) {
+  size_t idx;
+  idx = (size_t)bytes[src_base + x];
+  if (idx >= palette_entries) {
+    return NI_BMP_ERR_PALETTE_INDEX;
+  }
+  out[dst + 0u] = bytes[palette_offset + idx * 4u + 2u];
+  out[dst + 1u] = bytes[palette_offset + idx * 4u + 1u];
+  out[dst + 2u] = bytes[palette_offset + idx * 4u + 0u];
+  return NI_BMP_OK;
+}
+
+static int ni_bmp_decode_raw_pixel(const uint8_t *bytes, uint8_t *out,
+                                   size_t s, size_t d, size_t channels) {
+  out[d + 0u] = bytes[s + 2u];
+  out[d + 1u] = bytes[s + 1u];
+  out[d + 2u] = bytes[s + 0u];
+  if (channels == 4u) {
+    out[d + 3u] = bytes[s + 3u];
+  }
+  return NI_BMP_OK;
+}
+
 int ni_bmp_decode_into(const uint8_t *bytes, size_t size,
                        const ni_bmp_info *info, uint8_t *out, size_t out_cap) {
   uint32_t y;
@@ -213,14 +238,13 @@ int ni_bmp_decode_into(const uint8_t *bytes, size_t size,
       const size_t src_base = pixel_offset + src_y * row_stride;
       const size_t dst_base = (size_t)y * width * 3u;
       for (x = 0u; x < info->width; x++) {
-        const size_t idx = (size_t)bytes[src_base + (size_t)x];
+        int code;
         const size_t dst = dst_base + (size_t)x * 3u;
-        if (idx >= palette_entries) {
-          return NI_BMP_ERR_PALETTE_INDEX;
+        code = ni_bmp_decode_indexed_pixel(bytes, out, src_base, (size_t)x, dst,
+                                           palette_offset, palette_entries);
+        if (code != NI_BMP_OK) {
+          return code;
         }
-        out[dst + 0u] = bytes[palette_offset + idx * 4u + 2u];
-        out[dst + 1u] = bytes[palette_offset + idx * 4u + 1u];
-        out[dst + 2u] = bytes[palette_offset + idx * 4u + 0u];
       }
     }
   } else {
@@ -232,11 +256,10 @@ int ni_bmp_decode_into(const uint8_t *bytes, size_t size,
       for (x = 0u; x < info->width; x++) {
         const size_t s = src_base + (size_t)x * src_channels;
         const size_t d = dst_base + (size_t)x * channels;
-        out[d + 0u] = bytes[s + 2u];
-        out[d + 1u] = bytes[s + 1u];
-        out[d + 2u] = bytes[s + 0u];
-        if (channels == 4u) {
-          out[d + 3u] = bytes[s + 3u];
+        int code;
+        code = ni_bmp_decode_raw_pixel(bytes, out, s, d, channels);
+        if (code != NI_BMP_OK) {
+          return code;
         }
       }
     }

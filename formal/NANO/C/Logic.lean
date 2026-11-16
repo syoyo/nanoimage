@@ -217,6 +217,19 @@ theorem ExS.call {f args vs fn o s'} (hargs : EvArgs p s args vs) (hf : p f = so
     simp only [execStmt, h1 n (by omega), Res.bind_eq, Res.bind_ok, hf, hlen, ite_true]
     rcases ho with rfl | rfl <;> simp only [h2 n (by omega), Res.bind_ok] <;> rfl⟩
 
+/-- Statement-level call of a value-returning function: the result is
+    discarded and the caller continues with the callee's memory. -/
+theorem ExS.call_ret {f args vs fn v s'} (hargs : EvArgs p s args vs) (hf : p f = some fn)
+    (hlen : fn.params.length = vs.length)
+    (hbody : ExS p ⟨frameLocals fn.params vs, s.mem, s.ro⟩ fn.body (.ret (some v)) s') :
+    ExS p s (.call none f args) .normal { s with mem := s'.mem } := by
+  obtain ⟨K1, h1⟩ := hargs
+  obtain ⟨K2, h2⟩ := hbody
+  exact ⟨max K1 K2 + 1, shift fun n hn => by
+    simp only [execStmt, h1 n (by omega), Res.bind_eq, Res.bind_ok, hf, hlen, ite_true,
+      h2 n (by omega)]
+    rfl⟩
+
 theorem ExS.call_dst {d f args vs fn v s'} (hargs : EvArgs p s args vs) (hf : p f = some fn)
     (hlen : fn.params.length = vs.length)
     (hbody : ExS p ⟨frameLocals fn.params vs, s.mem, s.ro⟩ fn.body (.ret (some v)) s') :

@@ -60,6 +60,8 @@ FUNCTIONS = [
     "ni_bmp_decode_into",
     "ni_bmp_header_arith",
     "ni_bmp_header_palette",
+    "ni_bmp_decode_indexed_pixel",
+    "ni_bmp_decode_raw_pixel",
 ]
 
 # String literals live in one read-only block at this index.
