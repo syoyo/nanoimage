@@ -123,8 +123,8 @@ theorem locals_upd_extract {l : Locals} (i : Nat) (v : Val) (j : Nat) (h : j ≠
     `.brk`-terminated at `width`. -/
 theorem loop0_iter (m : Mem) (d obl : List UInt8)
     (bd ob : Nat) (hm : m bd = some d) (hd : d.length < 2 ^ 64)
-    (hob : m ob = some obl) (hd0 : bd ≠ ob) (ho2 : 2 ≠ ob) (bd2 : 2 ≠ bd)
-    (info : List UInt8) (hinfo : m 2 = some info) (h48 : info.length = 48)
+    (hob : m ob = some obl) (hd0 : bd ≠ ob) (ho2 : 3 ≠ ob) (bd2 : 3 ≠ bd)
+    (info : List UInt8) (hinfo : m 3 = some info) (h48 : info.length = 48)
     (h : BmpInfo) (hbc : h.bitCount = 8)
     (hw : (info.drop 24).take 4 = encodeLE 4 h.width) (hwv : h.width < 4294967296)
     (y : Nat)
@@ -141,7 +141,7 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
       h.width - x = n →
       x ≤ h.width →
       s.locals 0 = some (.ptr bd 0) →
-      s.locals 2 = some (.ptr 2 0) →
+      s.locals 2 = some (.ptr 3 0) →
       s.locals 3 = some (.ptr ob 0) →
       s.locals 5 = some (.int ⟨32, false⟩ y) →
       s.locals 6 = some (.int ⟨32, false⟩ x) →
@@ -152,13 +152,13 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
       s.ro = false →
       s.mem ob = some (bmpRowsBytes d h y ++ rowOut d h y x ++ obl.drop ((y * h.width + x) * 3)) →
       s.mem bd = some d →
-      s.mem 2 = some info →
+      s.mem 3 = some info →
       ∃ s', ExS Gen.prog s Gen.ni_bmp_decode_into_loop0 .normal s' ∧
         s'.mem ob = some (bmpRowsBytes d h (y + 1) ++ obl.drop ((y + 1) * (h.width * 3))) ∧
         s'.locals 5 = some (.int ⟨32, false⟩ y) ∧
         (∀ j, j ≠ 6 → j ≠ 17 → j ≠ 18 → s'.locals j = s.locals j) ∧
         s'.mem bd = s.mem bd ∧
-        s'.mem 2 = s.mem 2 ∧
+        s'.mem 3 = s.mem 3 ∧
         s'.ro = s.ro := by
   intro n
   induction n with
@@ -168,10 +168,10 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
       subst hxeq
       have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
       have hLoad : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.field (.var 2) 24)) (.int ⟨32, false⟩ h.width) := by
-        have hField : EvE Gen.prog s (.field (.var 2) 24) (.ptr 2 24) :=
+        have hField : EvE Gen.prog s (.field (.var 2) 24) (.ptr 3 24) :=
           EvE.field (EvE.var hl2)
             (ptrAddN_ok smem2 (by omega))
-        exact EvE.load hField (load_u32_field s.mem 2 info smem2 h48 24 (by omega) h.width hw hwv)
+        exact EvE.load hField (load_u32_field s.mem 3 info smem2 h48 24 (by omega) h.width hw hwv)
       have hCond : EvE Gen.prog s (.bin .lt (some ⟨32, false⟩) (.var 6) (.load (.int ⟨32, false⟩) (.field (.var 2) 24))) (boolVal false) := by
         have hdec : decide (h.width < h.width) = false := decide_eq_false (by omega)
         exact EvE.bin (EvE.var hl6) hLoad
@@ -204,11 +204,11 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
       have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
       have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
       -- load width field and evaluate the guard
-      have hField : EvE Gen.prog s (.field (.var 2) 24) (.ptr 2 24) :=
+      have hField : EvE Gen.prog s (.field (.var 2) 24) (.ptr 3 24) :=
         EvE.field (EvE.var hl2)
           (ptrAddN_ok smem2 (by omega))
       have hLoad : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.field (.var 2) 24)) (.int ⟨32, false⟩ h.width) :=
-        EvE.load hField (load_u32_field s.mem 2 info smem2 h48 24 (by omega) h.width hw hwv)
+        EvE.load hField (load_u32_field s.mem 3 info smem2 h48 24 (by omega) h.width hw hwv)
       have hCond : EvE Gen.prog s (.bin .lt (some ⟨32, false⟩) (.var 6) (.load (.int ⟨32, false⟩) (.field (.var 2) 24))) (boolVal true) := by
         have hdec : decide (x < h.width) = true := decide_eq_true (by omega)
         exact EvE.bin (EvE.var hl6) hLoad (by rw [bin_u32_lt, hdec])
@@ -383,21 +383,21 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
         show (s2.mem bd) = some d
         rw [show s2.mem = sP.mem from rfl]
         exact hMemPbd
-      have hMem2_2 : s2.mem 2 = some info := by
-        show (sP.mem 2) = some info
+      have hMem2_2 : s2.mem 3 = some info := by
+        show (sP.mem 3) = some info
         rw [hMemP2]
-        show (s1.mem 2) = some info
+        show (s1.mem 3) = some info
         rw [show s1.mem = s.mem from rfl]
         exact smem2
-      have hMem3_2 : s3.mem 2 = some info := by
-        show (s2.mem 2) = some info
+      have hMem3_2 : s3.mem 3 = some info := by
+        show (s2.mem 3) = some info
         exact hMem2_2
       have h0a : s1.locals 0 = some (.ptr bd 0) := locals_upd_extract 18 (.int ⟨64, false⟩ (y * h.width * 3 + x * 3)) 0 (by decide : ¬ (0 : Nat) = 18) hl0
       have h0b : s2.locals 0 = some (.ptr bd 0) := locals_upd_extract 17 (.int ⟨32, true⟩ 0) 0 (by decide : ¬ (0 : Nat) = 17) h0a
       have hl0_3 : s3.locals 0 = some (.ptr bd 0) := locals_upd_extract 6 (.int ⟨32, false⟩ (x + 1)) 0 (by decide : ¬ (0 : Nat) = 6) h0b
-      have h2a : s1.locals 2 = some (.ptr 2 0) := locals_upd_extract 18 (.int ⟨64, false⟩ (y * h.width * 3 + x * 3)) 2 (by decide : ¬ (2 : Nat) = 18) hl2
-      have h2b : s2.locals 2 = some (.ptr 2 0) := locals_upd_extract 17 (.int ⟨32, true⟩ 0) 2 (by decide : ¬ (2 : Nat) = 17) h2a
-      have hl2_3 : s3.locals 2 = some (.ptr 2 0) := locals_upd_extract 6 (.int ⟨32, false⟩ (x + 1)) 2 (by decide : ¬ (2 : Nat) = 6) h2b
+      have h2a : s1.locals 2 = some (.ptr 3 0) := locals_upd_extract 18 (.int ⟨64, false⟩ (y * h.width * 3 + x * 3)) 2 (by decide : ¬ (2 : Nat) = 18) hl2
+      have h2b : s2.locals 2 = some (.ptr 3 0) := locals_upd_extract 17 (.int ⟨32, true⟩ 0) 2 (by decide : ¬ (2 : Nat) = 17) h2a
+      have hl2_3 : s3.locals 2 = some (.ptr 3 0) := locals_upd_extract 6 (.int ⟨32, false⟩ (x + 1)) 2 (by decide : ¬ (2 : Nat) = 6) h2b
       have h3a : s1.locals 3 = some (.ptr ob 0) := locals_upd_extract 18 (.int ⟨64, false⟩ (y * h.width * 3 + x * 3)) 3 (by decide : ¬ (3 : Nat) = 18) hl3
       have h3b : s2.locals 3 = some (.ptr ob 0) := locals_upd_extract 17 (.int ⟨32, true⟩ 0) 3 (by decide : ¬ (3 : Nat) = 17) h3a
       have hl3_3 : s3.locals 3 = some (.ptr ob 0) := locals_upd_extract 6 (.int ⟨32, false⟩ (x + 1)) 3 (by decide : ¬ (3 : Nat) = 6) h3b
@@ -443,8 +443,8 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
           rw [hMem'bd]
           exact hMem3bd
         rw [h1, hmem2]
-      have hMem'2C : s'.mem 2 = s.mem 2 := by
-        have h1 : s'.mem 2 = some info := by
+      have hMem'2C : s'.mem 3 = s.mem 3 := by
+        have h1 : s'.mem 3 = some info := by
           rw [hMem'2]
           exact hMem3_2
         rw [h1, smem2]
@@ -468,8 +468,8 @@ theorem loop0_iter (m : Mem) (d obl : List UInt8)
     16=dst_base, 17=code, 18=dst -/
 theorem ni_bmp_decode_into_loop0_ok_exs (m : Mem) (d obl : List UInt8)
     (bd ob : Nat) (hm : m bd = some d) (hd : d.length < 2 ^ 64)
-    (hob : m ob = some obl) (hd0 : bd ≠ ob) (ho2 : 2 ≠ ob) (bd2 : 2 ≠ bd)
-    (info : List UInt8) (hinfo : m 2 = some info) (h48 : info.length = 48)
+    (hob : m ob = some obl) (hd0 : bd ≠ ob) (ho2 : 3 ≠ ob) (bd2 : 3 ≠ bd)
+    (info : List UInt8) (hinfo : m 3 = some info) (h48 : info.length = 48)
     (h : BmpInfo) (hbc : h.bitCount = 8)
     (hw : (info.drop 24).take 4 = encodeLE 4 h.width) (hwv : h.width < 4294967296)
     (y x : Nat) (hx : x ≤ h.width)
@@ -485,7 +485,7 @@ theorem ni_bmp_decode_into_loop0_ok_exs (m : Mem) (d obl : List UInt8)
     (ro : Bool) (hro : ro = false) :
     ∃ s', ExS Gen.prog
       ⟨frameLocals [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-        ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 2 0, .ptr ob 0, .int ⟨64, false⟩ obl.length,
+        ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 3 0, .ptr ob 0, .int ⟨64, false⟩ obl.length,
           .int ⟨32, false⟩ y, .int ⟨32, false⟩ x,
           .int ⟨64, false⟩ h.width, .int ⟨64, false⟩ h.height, .int ⟨64, false⟩ h.channels,
           .int ⟨64, false⟩ h.rowStride, .int ⟨64, false⟩ h.pixelOffset,
@@ -503,7 +503,7 @@ theorem ni_bmp_decode_into_loop0_ok_exs (m : Mem) (d obl : List UInt8)
     y hout hlen hy hok_row hbok ro hro
     (h.width - x) x
     ⟨frameLocals [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-      ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 2 0, .ptr ob 0, .int ⟨64, false⟩ obl.length,
+      ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 3 0, .ptr ob 0, .int ⟨64, false⟩ obl.length,
         .int ⟨32, false⟩ y, .int ⟨32, false⟩ x,
         .int ⟨64, false⟩ h.width, .int ⟨64, false⟩ h.height, .int ⟨64, false⟩ h.channels,
         .int ⟨64, false⟩ h.rowStride, .int ⟨64, false⟩ h.pixelOffset,

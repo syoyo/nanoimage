@@ -31,8 +31,8 @@ open NANO NANO.C
     writes the flattened `bmpPixels` to `out`. -/
 theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
     (bd ob : Nat) (hm : m bd = some d) (hd : d.length < 2 ^ 64)
-    (hob : m ob = some obl) (hd0 : bd ≠ ob) (ho2 : 2 ≠ ob) (bd2 : 2 ≠ bd)
-    (info : List UInt8) (hinfo : m 2 = some info) (h48 : info.length = 48)
+    (hob : m ob = some obl) (hd0 : bd ≠ ob) (ho2 : 3 ≠ ob) (bd2 : 3 ≠ bd)
+    (info : List UInt8) (hinfo : m 3 = some info) (h48 : info.length = 48)
     (h : BmpInfo)
     (hrows : (info.drop 0).take 8 = encodeLE 8 h.rowStride) (hrow64 : h.rowStride < 2 ^ 64)
     (howsz : (info.drop 8).take 8 = encodeLE 8 h.outSize)
@@ -60,16 +60,8 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
     (hwidth : 1 ≤ h.width)
     (ro : Bool) (hro : ro = false) :
     ∃ s', ExS Gen.prog
-      ⟨frameLocals [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-        ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 2 0, .ptr ob 0, .int ⟨64, false⟩ obl.length,
-          .int ⟨32, false⟩ 0, .int ⟨32, false⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨32, true⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-          .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨32, true⟩ 0] : List Val), m, ro⟩
+      ⟨frameLocals [0, 1, 2, 3, 4]
+        ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 3 0, .ptr ob 0, .int ⟨64, false⟩ obl.length] : List Val), m, ro⟩
       Gen.ni_bmp_decode_into.body
       (.ret (some (.int ⟨32, true⟩ 0))) s' ∧
     s'.mem ob = some
@@ -77,28 +69,20 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   let s : State :=
-    ⟨frameLocals [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-      ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 2 0, .ptr ob 0, .int ⟨64, false⟩ obl.length,
-        .int ⟨32, false⟩ 0, .int ⟨32, false⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨32, true⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0,
-        .int ⟨64, false⟩ 0, .int ⟨64, false⟩ 0, .int ⟨32, true⟩ 0] : List Val), m, ro⟩
+    ⟨frameLocals [0, 1, 2, 3, 4]
+      ([.ptr bd 0, .int ⟨64, false⟩ d.length, .ptr 3 0, .ptr ob 0, .int ⟨64, false⟩ obl.length] : List Val), m, ro⟩
   have hl0 : s.locals 0 = some (.ptr bd 0) := rfl
   have hl1 : s.locals 1 = some (.int ⟨64, false⟩ d.length) := rfl
-  have hl2 : s.locals 2 = some (.ptr 2 0) := rfl
+  have hl2 : s.locals 2 = some (.ptr 3 0) := rfl
   have hl3 : s.locals 3 = some (.ptr ob 0) := rfl
   have hl4 : s.locals 4 = some (.int ⟨64, false⟩ obl.length) := rfl
   have hros : s.ro = false := hro
   -- === load output_size field (offset 8, u64) and check the output capacity ===
-  have hField8 : EvE Gen.prog s (.field (.var 2) 8) (.ptr 2 8) :=
+  have hField8 : EvE Gen.prog s (.field (.var 2) 8) (.ptr 3 8) :=
     EvE.field (EvE.var hl2)
       (ptrAddN_ok hinfo (by omega))
   have hLoad8 : EvE Gen.prog s (.load (.int ⟨64, false⟩) (.field (.var 2) 8)) (.int ⟨64, false⟩ h.outSize) :=
-    EvE.load hField8 (load_u64_field s.mem 2 info hinfo h48 8 (by omega) h.outSize howsz houtsz64)
+    EvE.load hField8 (load_u64_field s.mem 3 info hinfo h48 8 (by omega) h.outSize howsz houtsz64)
   have hCmp8 : EvE Gen.prog s (.bin .lt (some ⟨64, false⟩) (.var 4) (.load (.int ⟨64, false⟩) (.field (.var 2) 8))) (boolVal false) := by
     have hdec : decide (obl.length < h.outSize) = false := decide_eq_false (by omega)
     exact EvE.bin (EvE.var hl4) hLoad8 (by rw [bin_u64_lt, hdec])
@@ -108,11 +92,11 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal s :=
     ExS.ite hCmp8 truthy_false ExS.skip
   -- ==== set 7: width (u32 → u64) ====
-  have hField24 : EvE Gen.prog s (.field (.var 2) 24) (.ptr 2 24) :=
+  have hField24 : EvE Gen.prog s (.field (.var 2) 24) (.ptr 3 24) :=
     EvE.field (EvE.var hl2)
       (ptrAddN_ok hinfo (by omega))
   have hLoad24 : EvE Gen.prog s (.load (.int ⟨32, false⟩) (.field (.var 2) 24)) (.int ⟨32, false⟩ h.width) :=
-    EvE.load hField24 (load_u32_field s.mem 2 info hinfo h48 24 (by omega) h.width hw hwv)
+    EvE.load hField24 (load_u32_field s.mem 3 info hinfo h48 24 (by omega) h.width hw hwv)
   have hCast7 : evalCast ⟨64, false⟩ (.int ⟨32, false⟩ h.width) = .ok (.int ⟨64, false⟩ h.width) :=
     u32_u64_cast h.width hwv
   have hSet7 : ExS Gen.prog s
@@ -120,15 +104,15 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal { s with locals := s.locals.upd 7 (.int ⟨64, false⟩ h.width) } :=
     ExS.set (EvE.cast hLoad24 hCast7)
   let s1 : State := { s with locals := s.locals.upd 7 (.int ⟨64, false⟩ h.width) }
-  have hl2_1 : s1.locals 2 = some (.ptr 2 0) :=
+  have hl2_1 : s1.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 7 (.int ⟨64, false⟩ h.width) 2 (by decide : ¬ (2 : Nat) = 7) hl2
   have hmem_1 : s1.mem = m := rfl
   -- ==== set 8: height (u32 → u64) ====
-  have hField28 : EvE Gen.prog s1 (.field (.var 2) 28) (.ptr 2 28) :=
+  have hField28 : EvE Gen.prog s1 (.field (.var 2) 28) (.ptr 3 28) :=
     EvE.field (EvE.var hl2_1)
       (ptrAddN_ok hinfo (by omega))
   have hLoad28 : EvE Gen.prog s1 (.load (.int ⟨32, false⟩) (.field (.var 2) 28)) (.int ⟨32, false⟩ h.height) :=
-    EvE.load hField28 (load_u32_field s1.mem 2 info (by rw [show s1.mem = m from rfl]; exact hinfo) h48 28 (by omega) h.height hht hhtwv)
+    EvE.load hField28 (load_u32_field s1.mem 3 info (by rw [show s1.mem = m from rfl]; exact hinfo) h48 28 (by omega) h.height hht hhtwv)
   have hCast8 : evalCast ⟨64, false⟩ (.int ⟨32, false⟩ h.height) = .ok (.int ⟨64, false⟩ h.height) :=
     u32_u64_cast h.height hhtwv
   have hSet8 : ExS Gen.prog s1
@@ -136,14 +120,14 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal { s1 with locals := s1.locals.upd 8 (.int ⟨64, false⟩ h.height) } :=
     ExS.set (EvE.cast hLoad28 hCast8)
   let s2 : State := { s1 with locals := s1.locals.upd 8 (.int ⟨64, false⟩ h.height) }
-  have hl2_2 : s2.locals 2 = some (.ptr 2 0) :=
+  have hl2_2 : s2.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 8 (.int ⟨64, false⟩ h.height) 2 (by decide : ¬ (2 : Nat) = 8) hl2_1
   -- ==== set 9: channels (u8 → u64) ====
-  have hField42 : EvE Gen.prog s2 (.field (.var 2) 42) (.ptr 2 42) :=
+  have hField42 : EvE Gen.prog s2 (.field (.var 2) 42) (.ptr 3 42) :=
     EvE.field (EvE.var hl2_2)
-      (ptrAddN_ok (show s2.mem 2 = some info from by rw [show s2.mem = m from rfl]; exact hinfo) (by omega))
+      (ptrAddN_ok (show s2.mem 3 = some info from by rw [show s2.mem = m from rfl]; exact hinfo) (by omega))
   have hLoad42 : EvE Gen.prog s2 (.load (.int ⟨8, false⟩) (.field (.var 2) 42)) (.int ⟨8, false⟩ h.channels) :=
-    EvE.load hField42 (load_u8_field s2.mem 2 info (by rw [show s2.mem = m from rfl]; exact hinfo) h48 42 (by omega) h.channels hch (by
+    EvE.load hField42 (load_u8_field s2.mem 3 info (by rw [show s2.mem = m from rfl]; exact hinfo) h48 42 (by omega) h.channels hch (by
       cases hchc with
       | inl h3 => rw [h3]; omega
       | inr h4 => rw [h4]; omega))
@@ -157,27 +141,27 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal { s2 with locals := s2.locals.upd 9 (.int ⟨64, false⟩ h.channels) } :=
     ExS.set (EvE.cast hLoad42 hCast9)
   let s3 : State := { s2 with locals := s2.locals.upd 9 (.int ⟨64, false⟩ h.channels) }
-  have hl2_3 : s3.locals 2 = some (.ptr 2 0) :=
+  have hl2_3 : s3.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 9 (.int ⟨64, false⟩ h.channels) 2 (by decide : ¬ (2 : Nat) = 9) hl2_2
   -- ==== set 10: row_stride (u64) ====
-  have hField0 : EvE Gen.prog s3 (.field (.var 2) 0) (.ptr 2 0) :=
+  have hField0 : EvE Gen.prog s3 (.field (.var 2) 0) (.ptr 3 0) :=
     EvE.field (EvE.var hl2_3)
-      (ptrAddN_ok (show s3.mem 2 = some info from by rw [show s3.mem = m from rfl]; exact hinfo) (by omega))
+      (ptrAddN_ok (show s3.mem 3 = some info from by rw [show s3.mem = m from rfl]; exact hinfo) (by omega))
   have hLoad0 : EvE Gen.prog s3 (.load (.int ⟨64, false⟩) (.field (.var 2) 0)) (.int ⟨64, false⟩ h.rowStride) :=
-    EvE.load hField0 (load_u64_field s3.mem 2 info (by rw [show s3.mem = m from rfl]; exact hinfo) h48 0 (by omega) h.rowStride hrows hrow64)
+    EvE.load hField0 (load_u64_field s3.mem 3 info (by rw [show s3.mem = m from rfl]; exact hinfo) h48 0 (by omega) h.rowStride hrows hrow64)
   have hSet10 : ExS Gen.prog s3
       (.set 10 (.load (.int ⟨64, false⟩) (.field (.var 2) 0)))
       .normal { s3 with locals := s3.locals.upd 10 (.int ⟨64, false⟩ h.rowStride) } :=
     ExS.set hLoad0
   let s4 : State := { s3 with locals := s3.locals.upd 10 (.int ⟨64, false⟩ h.rowStride) }
-  have hl2_4 : s4.locals 2 = some (.ptr 2 0) :=
+  have hl2_4 : s4.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 10 (.int ⟨64, false⟩ h.rowStride) 2 (by decide : ¬ (2 : Nat) = 10) hl2_3
   -- ==== set 11: pixel_offset (u32 → u64) ====
-  have hField32 : EvE Gen.prog s4 (.field (.var 2) 32) (.ptr 2 32) :=
+  have hField32 : EvE Gen.prog s4 (.field (.var 2) 32) (.ptr 3 32) :=
     EvE.field (EvE.var hl2_4)
-      (ptrAddN_ok (show s4.mem 2 = some info from by rw [show s4.mem = m from rfl]; exact hinfo) (by omega))
+      (ptrAddN_ok (show s4.mem 3 = some info from by rw [show s4.mem = m from rfl]; exact hinfo) (by omega))
   have hLoad32 : EvE Gen.prog s4 (.load (.int ⟨32, false⟩) (.field (.var 2) 32)) (.int ⟨32, false⟩ h.pixelOffset) :=
-    EvE.load hField32 (load_u32_field s4.mem 2 info (by rw [show s4.mem = m from rfl]; exact hinfo) h48 32 (by omega) h.pixelOffset hpIc hpicv)
+    EvE.load hField32 (load_u32_field s4.mem 3 info (by rw [show s4.mem = m from rfl]; exact hinfo) h48 32 (by omega) h.pixelOffset hpIc hpicv)
   have hCast11 : evalCast ⟨64, false⟩ (.int ⟨32, false⟩ h.pixelOffset) = .ok (.int ⟨64, false⟩ h.pixelOffset) :=
     u32_u64_cast h.pixelOffset hpicv
   have hSet11 : ExS Gen.prog s4
@@ -185,27 +169,27 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal { s4 with locals := s4.locals.upd 11 (.int ⟨64, false⟩ h.pixelOffset) } :=
     ExS.set (EvE.cast hLoad32 hCast11)
   let s5 : State := { s4 with locals := s4.locals.upd 11 (.int ⟨64, false⟩ h.pixelOffset) }
-  have hl2_5 : s5.locals 2 = some (.ptr 2 0) :=
+  have hl2_5 : s5.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 11 (.int ⟨64, false⟩ h.pixelOffset) 2 (by decide : ¬ (2 : Nat) = 11) hl2_4
   -- ==== set 12: palette_offset (u64) ====
-  have hField16 : EvE Gen.prog s5 (.field (.var 2) 16) (.ptr 2 16) :=
+  have hField16 : EvE Gen.prog s5 (.field (.var 2) 16) (.ptr 3 16) :=
     EvE.field (EvE.var hl2_5)
-      (ptrAddN_ok (show s5.mem 2 = some info from by rw [show s5.mem = m from rfl]; exact hinfo) (by omega))
+      (ptrAddN_ok (show s5.mem 3 = some info from by rw [show s5.mem = m from rfl]; exact hinfo) (by omega))
   have hLoad16 : EvE Gen.prog s5 (.load (.int ⟨64, false⟩) (.field (.var 2) 16)) (.int ⟨64, false⟩ h.paletteOffset) :=
-    EvE.load hField16 (load_u64_field s5.mem 2 info (by rw [show s5.mem = m from rfl]; exact hinfo) h48 16 (by omega) h.paletteOffset hpo hpal64)
+    EvE.load hField16 (load_u64_field s5.mem 3 info (by rw [show s5.mem = m from rfl]; exact hinfo) h48 16 (by omega) h.paletteOffset hpo hpal64)
   have hSet12 : ExS Gen.prog s5
       (.set 12 (.load (.int ⟨64, false⟩) (.field (.var 2) 16)))
       .normal { s5 with locals := s5.locals.upd 12 (.int ⟨64, false⟩ h.paletteOffset) } :=
     ExS.set hLoad16
   let s6 : State := { s5 with locals := s5.locals.upd 12 (.int ⟨64, false⟩ h.paletteOffset) }
-  have hl2_6 : s6.locals 2 = some (.ptr 2 0) :=
+  have hl2_6 : s6.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 12 (.int ⟨64, false⟩ h.paletteOffset) 2 (by decide : ¬ (2 : Nat) = 12) hl2_5
   -- ==== set 13: palette_entries (u32 → u64) ====
-  have hField36 : EvE Gen.prog s6 (.field (.var 2) 36) (.ptr 2 36) :=
+  have hField36 : EvE Gen.prog s6 (.field (.var 2) 36) (.ptr 3 36) :=
     EvE.field (EvE.var hl2_6)
-      (ptrAddN_ok (show s6.mem 2 = some info from by rw [show s6.mem = m from rfl]; exact hinfo) (by omega))
+      (ptrAddN_ok (show s6.mem 3 = some info from by rw [show s6.mem = m from rfl]; exact hinfo) (by omega))
   have hLoad36 : EvE Gen.prog s6 (.load (.int ⟨32, false⟩) (.field (.var 2) 36)) (.int ⟨32, false⟩ h.paletteEntries) :=
-    EvE.load hField36 (load_u32_field s6.mem 2 info (by rw [show s6.mem = m from rfl]; exact hinfo) h48 36 (by omega) h.paletteEntries hpentr hpentrv)
+    EvE.load hField36 (load_u32_field s6.mem 3 info (by rw [show s6.mem = m from rfl]; exact hinfo) h48 36 (by omega) h.paletteEntries hpentr hpentrv)
   have hCast13 : evalCast ⟨64, false⟩ (.int ⟨32, false⟩ h.paletteEntries) = .ok (.int ⟨64, false⟩ h.paletteEntries) :=
     u32_u64_cast h.paletteEntries hpentrv
   have hSet13 : ExS Gen.prog s6
@@ -213,7 +197,7 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal { s6 with locals := s6.locals.upd 13 (.int ⟨64, false⟩ h.paletteEntries) } :=
     ExS.set (EvE.cast hLoad36 hCast13)
   let s7 : State := { s6 with locals := s6.locals.upd 13 (.int ⟨64, false⟩ h.paletteEntries) }
-  have hl2_7 : s7.locals 2 = some (.ptr 2 0) :=
+  have hl2_7 : s7.locals 2 = some (.ptr 3 0) :=
     locals_upd_extract 13 (.int ⟨64, false⟩ h.paletteEntries) 2 (by decide : ¬ (2 : Nat) = 13) hl2_6
   -- ==== fits check the rowStride * height pair, then skip the trunc branch ====
   have h7_7 : s7.locals 7 = some (.int ⟨64, false⟩ h.width) := by
@@ -306,11 +290,11 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       .normal s7 :=
     ExS.ite hTruncOr truthy_false ExS.skip
   -- ==== the bit_count == 8 branch: palette sloppiness gate ====
-  have hField40 : EvE Gen.prog s7 (.field (.var 2) 40) (.ptr 2 40) :=
+  have hField40 : EvE Gen.prog s7 (.field (.var 2) 40) (.ptr 3 40) :=
     EvE.field (EvE.var hl2_7)
-      (ptrAddN_ok (show s7.mem 2 = some info from by rw [show s7.mem = m from rfl]; exact hinfo) (by omega))
+      (ptrAddN_ok (show s7.mem 3 = some info from by rw [show s7.mem = m from rfl]; exact hinfo) (by omega))
   have hLoad40 : EvE Gen.prog s7 (.load (.int ⟨16, false⟩) (.field (.var 2) 40)) (.int ⟨16, false⟩ h.bitCount) :=
-    EvE.load hField40 (load_u16_field s7.mem 2 info (by rw [show s7.mem = m from rfl]; exact hinfo) h48 40 (by omega) h.bitCount hbc8 hbcv)
+    EvE.load hField40 (load_u16_field s7.mem 3 info (by rw [show s7.mem = m from rfl]; exact hinfo) h48 40 (by omega) h.bitCount hbc8 hbcv)
   have hCast40 : evalCast ⟨32, false⟩ (.int ⟨16, false⟩ h.bitCount) = .ok (.int ⟨32, false⟩ h.bitCount) := by
     simp [evalCast, IntTy.modulus, IntTy.wrap, Int.ofNat_lt, show h.bitCount < 4294967296 from by omega]
   have hHcast40 : EvE Gen.prog s7 (.cast ⟨32, false⟩ (.load (.int ⟨16, false⟩) (.field (.var 2) 40))) (.int ⟨32, false⟩ h.bitCount) :=
@@ -371,7 +355,6 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
     exact ExS.seq hSkipCap (ExS.seq hSet7 (ExS.seq hSet8 (ExS.seq hSet9 (ExS.seq hSet10
       (ExS.seq hSet11 (ExS.seq hSet12 (ExS.seq hSet13 (ExS.seq hTruncSkip (ExS.seq hTruncSkip2
       (ExS.seq hb (ExS.ret (EvE.const _))))))))))))
-  have hl25 : s.locals 25 = some (.int ⟨32, true⟩ 0) := by rfl
   by_cases hbc8i : h.bitCount = 8
   · -- ==== 8-bit indexed (palette) path ====
     have hEq8 : EvE Gen.prog s7 (.bin .eq (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.load (.int ⟨16, false⟩) (.field (.var 2) 40))) (.const (.int ⟨32, false⟩ 8))) (boolVal true) := by
@@ -385,11 +368,11 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       exact hob
     have hmembd0 : s8.mem bd = some d := by
       rw [show s8.mem = m from rfl]; exact hm
-    have hmem20 : s8.mem 2 = some info := by
+    have hmem20 : s8.mem 3 = some info := by
       rw [show s8.mem = m from rfl]; exact hinfo
     have hl0_8 : s8.locals 0 = some (.ptr bd 0) :=
       locals_upd_extract 5 (.int ⟨32, false⟩ 0) 0 (by decide : ¬ (0 : Nat) = 5) h0_7
-    have hl2_8 : s8.locals 2 = some (.ptr 2 0) :=
+    have hl2_8 : s8.locals 2 = some (.ptr 3 0) :=
       locals_upd_extract 5 (.int ⟨32, false⟩ 0) 2 (by decide : ¬ (2 : Nat) = 5) hl2_7
     have hl3_8 : s8.locals 3 = some (.ptr ob 0) :=
       locals_upd_extract 5 (.int ⟨32, false⟩ 0) 3 (by decide : ¬ (3 : Nat) = 5) h3_7
@@ -460,12 +443,12 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       exact hob
     have hmembdD : s9D.mem bd = some d := by
       rw [show s9D.mem = m from rfl]; exact hm
-    have hmem2D : s9D.mem 2 = some info := by
+    have hmem2D : s9D.mem 3 = some info := by
       rw [show s9D.mem = m from rfl]; exact hinfo
     have hl0_D : s9D.locals 0 = some (.ptr bd 0) :=
       locals_upd_extract 5 (.int ⟨32, false⟩ 0) 0 (by decide : ¬ (0 : Nat) = 5)
         (locals_upd_extract 19 (.int ⟨64, false⟩ h.channels) 0 (by decide : ¬ (0 : Nat) = 19) h0_7)
-    have hl2_D : s9D.locals 2 = some (.ptr 2 0) :=
+    have hl2_D : s9D.locals 2 = some (.ptr 3 0) :=
       locals_upd_extract 5 (.int ⟨32, false⟩ 0) 2 (by decide : ¬ (2 : Nat) = 5)
         (locals_upd_extract 19 (.int ⟨64, false⟩ h.channels) 2 (by decide : ¬ (2 : Nat) = 19) hl2_7)
     have hl3_D : s9D.locals 3 = some (.ptr ob 0) :=
@@ -499,9 +482,6 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
       rw [show s9D.locals = s8D.locals.upd 5 (.int ⟨32, false⟩ 0) from rfl,
           show s8D.locals = s7.locals.upd 19 (.int ⟨64, false⟩ h.channels) from rfl]
       rw [Locals.upd_ne _ _ (by decide : ¬ (19 : Nat) = 5), Locals.upd_same]
-    have hl25_D : s9D.locals 25 = some (.int ⟨32, true⟩ 0) :=
-      locals_upd_extract 5 (.int ⟨32, false⟩ 0) 25 (by decide : ¬ (25 : Nat) = 5)
-        (locals_upd_extract 19 (.int ⟨64, false⟩ h.channels) 25 (by decide : ¬ (25 : Nat) = 19) hl25)
     have hsrcD : ∀ y i, y < h.height → i < h.width → h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + i * h.channels + h.channels ≤ d.length := by
       intro y i hy hi
       have hge : h.width * h.channels ≤ h.rowStride := hrsd hbc8i
@@ -534,7 +514,7 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
           exact hout)
         hobl64 hsrcD hok hwidth ro hro
         h.height 0 s9D (by omega) (by omega)
-        hl0_D hl2_D hl3_D hl5_D hl7_D hl8_D hl9_D hl10_D hl11_D hl12_D hl13_D hl19_D hl25_D hros
+        hl0_D hl2_D hl3_D hl5_D hl7_D hl8_D hl9_D hl10_D hl11_D hl12_D hl13_D hl19_D hros
         hmem0D hmembdD hmem2D
     have hRS2 : bmpRowSize h = h.width * h.channels := by
       show h.width * (if h.bitCount = 8 then 3 else h.channels) = h.width * h.channels

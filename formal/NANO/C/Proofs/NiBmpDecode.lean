@@ -177,7 +177,7 @@ theorem ni_bmp_decode_raw_pixel_exs (m : Mem) (d obl : List UInt8)
     (hob : m ob = some obl) (src dst c : Nat)
     (hs0 : src + 3 ≤ d.length) (hs4 : c = 4 → src + 4 ≤ d.length)
     (hd20 : dst + 3 ≤ obl.length) (hd24 : c = 4 → dst + 4 ≤ obl.length) (hclt : c ≤ 4)
-    (hlen : obl.length < 2 ^ 64) (hd0 : bd ≠ ob) (h2ob : 2 ≠ ob)
+    (hlen : obl.length < 2 ^ 64) (hd0 : bd ≠ ob) (h2ob : 3 ≠ ob)
     (ro : Bool) (hro : ro = false) :
     ∃ s', ExS Gen.prog
       ⟨frameLocals [0, 1, 2, 3, 4] ([.ptr bd 0, .ptr ob 0, .int ⟨64, false⟩ src, .int ⟨64, false⟩ dst, .int ⟨64, false⟩ c] : List Val), m, ro⟩
@@ -191,7 +191,7 @@ theorem ni_bmp_decode_raw_pixel_exs (m : Mem) (d obl : List UInt8)
           ++ (if c = 4 then encodeLE 1 (byteAt d (src + 3)) else []))
         ++ obl.drop (dst + (if c = 4 then 4 else 3))) ∧
     s'.mem bd = some d ∧
-    s'.mem 2 = m 2 := by
+    s'.mem 3 = m 3 := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   let s0 : State := { locals := frameLocals [0, 1, 2, 3, 4] ([.ptr bd 0, .ptr ob 0, .int ⟨64, false⟩ src, .int ⟨64, false⟩ dst, .int ⟨64, false⟩ c] : List Val), mem := m, ro := ro }
@@ -420,14 +420,14 @@ theorem ni_bmp_decode_raw_pixel_exs (m : Mem) (d obl : List UInt8)
     · show ((s3.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ encodeLE 1 (byteAt d (src + 3)) ++ obl.drop (dst + 4))) bd) = some d
       rw [mem_upd_other s3.mem ob bd _ hd0]
       exact hMem3bd
-    · show ((s3.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ encodeLE 1 (byteAt d (src + 3)) ++ obl.drop (dst + 4))) 2) = m 2
-      rw [mem_upd_other s3.mem ob 2 _ h2ob]
-      show ((s2.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ obl.drop (dst + 3))) 2) = m 2
-      rw [mem_upd_other s2.mem ob 2 _ h2ob]
-      show ((s1.mem.upd ob ((obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).take (dst + 1) ++ encodeLE 1 (byteAt d (src + 1)) ++ (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).drop (dst + 2))) 2) = m 2
-      rw [mem_upd_other s1.mem ob 2 _ h2ob]
-      show ((m.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1))) 2) = m 2
-      rw [mem_upd_other m ob 2 _ h2ob]
+    · show ((s3.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ encodeLE 1 (byteAt d (src + 3)) ++ obl.drop (dst + 4))) 3) = m 3
+      rw [mem_upd_other s3.mem ob 3 _ h2ob]
+      show ((s2.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ obl.drop (dst + 3))) 3) = m 3
+      rw [mem_upd_other s2.mem ob 3 _ h2ob]
+      show ((s1.mem.upd ob ((obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).take (dst + 1) ++ encodeLE 1 (byteAt d (src + 1)) ++ (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).drop (dst + 2))) 3) = m 3
+      rw [mem_upd_other s1.mem ob 3 _ h2ob]
+      show ((m.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1))) 3) = m 3
+      rw [mem_upd_other m ob 3 _ h2ob]
   · -- 24-bit output: `.ite` takes .skip
     have heq : evalCast ⟨64, false⟩ (.int ⟨32, false⟩ 4) = .ok (.int ⟨64, false⟩ 4) :=
       u32_u64_cast 4 (by omega)
@@ -459,12 +459,12 @@ theorem ni_bmp_decode_raw_pixel_exs (m : Mem) (d obl : List UInt8)
     · show ((s2.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ obl.drop (dst + 3))) bd) = some d
       rw [mem_upd_other s2.mem ob bd _ hd0]
       exact hMem2bd
-    · show ((s2.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ obl.drop (dst + 3))) 2) = m 2
-      rw [mem_upd_other s2.mem ob 2 _ h2ob]
-      show ((s1.mem.upd ob ((obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).take (dst + 1) ++ encodeLE 1 (byteAt d (src + 1)) ++ (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).drop (dst + 2))) 2) = m 2
-      rw [mem_upd_other s1.mem ob 2 _ h2ob]
-      show ((m.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1))) 2) = m 2
-      rw [mem_upd_other m ob 2 _ h2ob]
+    · show ((s2.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ encodeLE 1 (byteAt d (src + 1)) ++ encodeLE 1 (byteAt d src) ++ obl.drop (dst + 3))) 3) = m 3
+      rw [mem_upd_other s2.mem ob 3 _ h2ob]
+      show ((s1.mem.upd ob ((obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).take (dst + 1) ++ encodeLE 1 (byteAt d (src + 1)) ++ (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1)).drop (dst + 2))) 3) = m 3
+      rw [mem_upd_other s1.mem ob 3 _ h2ob]
+      show ((m.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (src + 2)) ++ obl.drop (dst + 1))) 3) = m 3
+      rw [mem_upd_other m ob 3 _ h2ob]
 
 /-- `ni_bmp_decode_indexed_pixel` with an in-range index writes BGR from the
     palette and returns 0. Locals: 0=bytes, 1=out, 2=src_base, 3=x, 4=dst,
@@ -472,7 +472,7 @@ theorem ni_bmp_decode_raw_pixel_exs (m : Mem) (d obl : List UInt8)
 theorem ni_bmp_decode_indexed_pixel_ok_exs (m : Mem) (d obl : List UInt8)
     (bd ob : Nat) (hm : m bd = some d) (hd : d.length < 2 ^ 64)
     (hob : m ob = some obl) (src_base x dst palette_offset palette_entries : Nat)
-    (hd0 : bd ≠ ob) (h2ob : 2 ≠ ob)
+    (hd0 : bd ≠ ob) (h2ob : 3 ≠ ob)
     (hs : src_base + x < d.length)
     (hp : palette_offset + byteAt d (src_base + x) * 4 + 3 ≤ d.length)
     (hd2 : dst + 3 ≤ obl.length) (hclt : byteAt d (src_base + x) < palette_entries)
@@ -489,7 +489,7 @@ theorem ni_bmp_decode_indexed_pixel_ok_exs (m : Mem) (d obl : List UInt8)
         ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4))
         ++ obl.drop (dst + 3)) ∧
     s'.mem bd = some d ∧
-    s'.mem 2 = m 2 := by
+    s'.mem 3 = m 3 := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   have hblt : byteAt d (src_base + x) < 256 := byteAt_lt d (src_base + x)
@@ -681,12 +681,12 @@ theorem ni_bmp_decode_indexed_pixel_ok_exs (m : Mem) (d obl : List UInt8)
   · show ((s3.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 1)) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4)) ++ obl.drop (dst + 3))) bd) = some d
     rw [mem_upd_other s3.mem ob bd _ hd0]
     exact hMem3bd
-  · show ((s3.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 1)) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4)) ++ obl.drop (dst + 3))) 2) = m 2
-    rw [mem_upd_other s3.mem ob 2 _ h2ob]
-    show ((s2.mem.upd ob ((obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ obl.drop (dst + 1)).take (dst + 1) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 1)) ++ (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ obl.drop (dst + 1)).drop (dst + 2))) 2) = m 2
-    rw [mem_upd_other s2.mem ob 2 _ h2ob]
-    show ((s1.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ obl.drop (dst + 1))) 2) = m 2
-    rw [mem_upd_other s1.mem ob 2 _ h2ob]
+  · show ((s3.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 1)) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4)) ++ obl.drop (dst + 3))) 3) = m 3
+    rw [mem_upd_other s3.mem ob 3 _ h2ob]
+    show ((s2.mem.upd ob ((obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ obl.drop (dst + 1)).take (dst + 1) ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 1)) ++ (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ obl.drop (dst + 1)).drop (dst + 2))) 3) = m 3
+    rw [mem_upd_other s2.mem ob 3 _ h2ob]
+    show ((s1.mem.upd ob (obl.take dst ++ encodeLE 1 (byteAt d (palette_offset + byteAt d (src_base + x) * 4 + 2)) ++ obl.drop (dst + 1))) 3) = m 3
+    rw [mem_upd_other s1.mem ob 3 _ h2ob]
 
 /-- `ni_bmp_decode_indexed_pixel` with an out-of-range index returns 11 and
     leaves memory unchanged. Locals: 0=bytes, 1=out, 2=src_base, 3=x, 4=dst,
@@ -694,7 +694,7 @@ theorem ni_bmp_decode_indexed_pixel_ok_exs (m : Mem) (d obl : List UInt8)
 theorem ni_bmp_decode_indexed_pixel_err_exs (m : Mem) (d obl : List UInt8)
     (bd ob : Nat) (hm : m bd = some d) (hd : d.length < 2 ^ 64)
     (hob : m ob = some obl) (src_base x dst palette_offset palette_entries : Nat)
-    (hd0 : bd ≠ ob) (h2ob : 2 ≠ ob)
+    (hd0 : bd ≠ ob) (h2ob : 3 ≠ ob)
     (hs : src_base + x < d.length)
     (hge : palette_entries ≤ byteAt d (src_base + x))
     (ro : Bool) (hro : ro = false) :
@@ -702,7 +702,7 @@ theorem ni_bmp_decode_indexed_pixel_err_exs (m : Mem) (d obl : List UInt8)
       ⟨frameLocals [0, 1, 2, 3, 4, 5, 6] ([.ptr bd 0, .ptr ob 0, .int ⟨64, false⟩ src_base, .int ⟨64, false⟩ x, .int ⟨64, false⟩ dst, .int ⟨64, false⟩ palette_offset, .int ⟨64, false⟩ palette_entries] : List Val), m, ro⟩
       Gen.ni_bmp_decode_indexed_pixel.body
       (.ret (some (.int ⟨32, true⟩ 11))) s' ∧
-    s'.mem ob = some obl ∧ s'.mem bd = some d ∧ s'.mem 2 = m 2 := by
+    s'.mem ob = some obl ∧ s'.mem bd = some d ∧ s'.mem 3 = m 3 := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   let s0 : State := { locals := frameLocals [0, 1, 2, 3, 4, 5, 6] ([.ptr bd 0, .ptr ob 0, .int ⟨64, false⟩ src_base, .int ⟨64, false⟩ x, .int ⟨64, false⟩ dst, .int ⟨64, false⟩ palette_offset, .int ⟨64, false⟩ palette_entries] : List Val), mem := m, ro := ro }
   have hl0 : s0.locals 0 = some (.ptr bd 0) := rfl
@@ -745,7 +745,7 @@ theorem ni_bmp_decode_indexed_pixel_err_exs (m : Mem) (d obl : List UInt8)
     exact hob
   · show (s1.mem bd) = some d
     exact hm
-  · show (s1.mem 2) = m 2
+  · show (s1.mem 3) = m 3
     rfl
 
 end NANO.C.Proofs
