@@ -433,7 +433,8 @@ theorem ni_bmp_geometry_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = s
     ∃ s', ExS Gen.prog ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
       Gen.ni_bmp_geometry.body
       (.ret (some (.int ⟨32, true⟩ (bmpGeometryCode d)))) s' ∧
-    (bmpGeometryCode d = 0 → s'.mem 3 = some (geomOutBlock obl d)) := by
+    (bmpGeometryCode d = 0 → s'.mem 3 = some (geomOutBlock obl d)) ∧
+    (bmpGeometryCode d = 0 → ∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h34 : 34 ≤ d.length := hd
   let s5 : State :=
     { locals := ((frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0]).upd 3 (.int ⟨32, true⟩ (rd32le d 18))
@@ -523,7 +524,7 @@ theorem ni_bmp_geometry_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = s
           (.ret (some (.const (.int ⟨32, true⟩ 3)))) .skip)
         (.ret (some (.int ⟨32, true⟩ 3))) s5 :=
       ExS.ite ei truthy_true (ExS.ret (EvE.const _))
-    refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide)⟩
+    refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide), fun _ _ _ => rfl⟩
     rw [hbv]
     exact ExS.seq hw3 (ExS.seq hw4 (ExS.seq hw5 (ExS.seq hw6 (ExS.seq hw7 (ExS.seq_ret hite)))))
   · by_cases hB66 : IntTy.toInt ⟨32, true⟩ (rd32le d 22) = 0
@@ -576,7 +577,7 @@ theorem ni_bmp_geometry_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = s
           rw [e22] at h2
           exact h2
         simp [bmpGeometryCode, hgt, hh0]
-      refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide)⟩
+      refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide), fun _ _ _ => rfl⟩
       rw [hbv]
       exact ExS.seq hw3 (ExS.seq hw4 (ExS.seq hw5 (ExS.seq hw6 (ExS.seq hw7 (ExS.seq_ret hite)))))
     · -- planes ≠ 1 → return 3 (short-circuit); else continue
@@ -639,7 +640,7 @@ theorem ni_bmp_geometry_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = s
             rw [e22] at h2
             omega
           simp [bmpGeometryCode, hgt, hh0, hC66]
-        refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide)⟩
+        refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide), fun _ _ _ => rfl⟩
         rw [hbv]
         exact ExS.seq hw3 (ExS.seq hw4 (ExS.seq hw5 (ExS.seq hw6 (ExS.seq hw7 (ExS.seq_ret hite)))))
       · -- planes == 1: continue with body
@@ -656,26 +657,26 @@ theorem ni_bmp_geometry_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = s
           have h2 := hA34
           omega
         by_cases hPos : NANO.toInt32 (rd32le d 22) ≥ 0
-        · obtain ⟨s', ex', hblk⟩ :=
+        · obtain ⟨s', ex', hblk, hUnt⟩ :=
             ni_bmp_geometry_exs_pos m bd d hm size hs hd hlen obl hob h48 ro hro hA34p hB66 hPl hPos
-          refine ⟨s', ex', fun hh => ?_⟩
+          refine ⟨s', ex', fun hh => ?_, fun hh => hUnt hh⟩
           rw [geomOutBlock_pos obl d hPos]
           exact hblk hh
         · by_cases hInMin : NANO.toInt32 (rd32le d 22) = -2147483648
-          · obtain ⟨s', ex', hblk⟩ :=
+          · obtain ⟨s', ex', hblk, hUnt⟩ :=
               ni_bmp_geometry_exs_neg_intmin m bd d hm size hs hd hlen obl hob h48 ro hro hA34p hB66 hPl (by
               have hNeg : NANO.toInt32 (rd32le d 22) < 0 := by omega
               exact hNeg) hInMin
-            refine ⟨s', ex', fun hh => ?_⟩
+            refine ⟨s', ex', fun hh => ?_, fun hh => hUnt hh⟩
             have hNeg : (NANO.toInt32 (rd32le d 22) : Int) < 0 := by
               rw [hInMin]; decide
             rw [geomOutBlock_intmin obl d hNeg hInMin]
             exact hblk hh
-          · obtain ⟨s', ex', hblk⟩ :=
+          · obtain ⟨s', ex', hblk, hUnt⟩ :=
               ni_bmp_geometry_exs_neg_normal m bd d hm size hs hd hlen obl hob h48 ro hro hA34p hB66 hPl (by
               have hNeg : NANO.toInt32 (rd32le d 22) < 0 := by omega
               exact hNeg) hInMin
-            refine ⟨s', ex', fun hh => ?_⟩
+            refine ⟨s', ex', fun hh => ?_, fun hh => hUnt hh⟩
             have hNeg : (NANO.toInt32 (rd32le d 22) : Int) < 0 := by omega
             rw [geomOutBlock_neg_normal obl d hNeg (by exact hInMin)]
             exact hblk hh

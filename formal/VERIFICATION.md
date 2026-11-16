@@ -45,7 +45,7 @@ No `native_decide`, no `bv_decide`.
 | 2 | Header info-block exports: `bmpHeadBlock`/`bmpHeaderFinalBlock` constructors, `header_stores_exs` memory export, guarded exports through `ni_bmp_header_rem_stores_exs` / `ni_bmp_header_rem_exs` / `ni_bmp_header_exs` (success ⇒ info object holds `bmpHeaderFinalBlock d gout`) | proven (`NiBmpHeaderCompose.lean`, `NiBmpHeader.lean`) |
 | 2 | Final-info-block field slices (10 fields + length), layered per store stage (`arithBlock_*`, `palBlock_*`, `headBlock_*`) | proven (`NiBmpLoad.lean`) |
 | 2 | Spec witness + reconstruction: `bmpHeaderInfoOf d`, `bmpHeader_ok_of_stages` (five stage verdicts ⇒ `bmpHeader size d = .ok (bmpHeaderInfoOf d)`, via `bmpOutputCompose_ok_8`/`_ne8`) | proven (`NiBmpLoad.lean`) |
-| 2 | Composition `ni_bmp_load_exs` (header fid 15 then decode fid 16, as the shell runs them) | **in progress** — remaining: restate `ni_bmp_decode_into_ok_exs` over the 5-param call frame (drop the over-strong `locals 25 = some 0` invariant from `loop2_iter`/`loop3_iter`; local 25 is write-before-read), then assemble with `ExS.call_dst`/`ExS.call_ret` |
+| 2 | Composition `ni_bmp_load_exs` (header fid 15 then decode fid 16, as the shell runs them): returns 0 under the five stage verdicts, output block holds the flattened `bmpPixels` bytes; plus the header framing exports (`∀ b ≠ 3, s'.mem b = s.mem b`) threaded through every stage, `ExS.call_ret`, and the stage/pixel bound bundles (`bmpHeaderInfoOf_stage_facts`, `_px8`, `_pos8`, `_idx8`) | **proven** (`NiBmpLoad.lean`, axioms `[propext, Classical.choice, Quot.sound]`) |
 | 2 | `ni_bmp_geometry_readers` proven (closed-form state with locals 3..7 set) | done |
 | 2 | `ni_bmp_mul_fits_exs` proven | done |
 | 2 | `ni_bmp_geometry_exs` reject-3 by_cases (widthI<=0, hI=0, planes!=1 → ret3) | done |
@@ -160,19 +160,23 @@ Kernel notes (no `unsafe`, no `native_decide`):
   `[propext, Classical.choice, Quot.sound]`. The proof consumes
   `loop1_iter`/`loop3_iter` directly (pointwise state hypotheses), so no
   frame-bridging was needed.
-* Header/decode composition (`ni_bmp_load_exs`, `NiBmpLoad.lean`): the
-  header-side exports are proven (the info object holds `bmpHeaderFinalBlock`
-  after a successful `ni_bmp_header`, with all ten field encodings derived,
-  and `bmpHeader_ok_of_stages` reconstructs the spec verdict), and
-  `ExS.call_ret` composes value-returning statement calls. The remaining
-  step is restating `ni_bmp_decode_into_ok_exs` over the 5-parameter call
-  frame: the loop iter theorems carry an over-strong
-  `locals 25 = some 0` invariant (local 25 is written before it is ever
-  read), which a fresh call frame — where locals ≥ 5 are unbound — cannot
-  supply. Dropping that invariant from `loop2_iter`/`loop3_iter` and
-  restating the decode theorem is mechanical; the composite assembly
-  (`ExS.call_dst` for the header call, the verdict `ite`, `ExS.call_ret`
-  for the decode call) is already specified.
+* Phase 2 is **complete**: the composed load `ni_bmp_load_exs`
+  (`NiBmpLoad.lean`) is proven — under the five stage verdicts
+  (signature, layout, geometry, arith, palette; equivalently
+  `bmpHeaderCode = 0`), running `ni_bmp_header` (fid 15) then
+  `ni_bmp_decode_into` (fid 16) returns 0 and the output block holds
+  `bmpRowsBytes d h h.height ++ out.drop (h.height * bmpRowSize h)` for
+  `h = bmpHeaderInfoOf d`, with `bmpHeader d.length d = .ok h`. Axioms
+  `[propext, Classical.choice, Quot.sound]`. Supporting pieces: framing
+  exports on every header stage (`∀ b ≠ 3, s'.mem b = s.mem b`, from
+  `mem_upd_other_blk`), `ExS.call_ret`, the decode theorem restated over
+  the 5-parameter call frame with the info block unified to block 3, the
+  ten `bmpHeaderFinalBlock` field slices, the witness `bmpHeaderInfoOf`,
+  the reconstruction `bmpHeader_ok_of_stages`, and the bound bundles
+  (`bmpHeaderInfoOf_stage_facts`, `_px8`, `_pos8`, `_idx8`). Boundary
+  notes: the composite covers the all-pixels-OK case (decode-side failure
+  codes remain cdiff-gated); the shell (allocation, `ni_image` fill,
+  error strings) stays unverified.
 * `ni_bmp_header_exs` composition note: the final theorem was assembled only
   after factoring the whole post-reader pipeline into standalone lemmas,
   because the monolithic term deep-recursed the Lean kernel even at

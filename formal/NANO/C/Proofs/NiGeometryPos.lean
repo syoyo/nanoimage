@@ -105,7 +105,8 @@ theorem ni_bmp_geometry_exs_pos (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd
       (.ret (some (.int ⟨32, true⟩ (bmpGeometryCode d)))) s' ∧
     (bmpGeometryCode d = 0 → s'.mem 3 =
       some (bmpTailBlock obl (rd32le d 18) (rd32le d 22) (rd16le d 28)
-        (if rd16le d 28 = 32 then 4 else 3) 0)) := by
+        (if rd16le d 28 = 32 then 4 else 3) 0)) ∧
+    (bmpGeometryCode d = 0 → ∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h34 : 34 ≤ d.length := hd
   let s5 : State :=
     { locals := ((frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0]).upd 3 (.int ⟨32, true⟩ (rd32le d 18))
@@ -266,12 +267,12 @@ theorem ni_bmp_geometry_exs_pos (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd
       .normal s5B :=
     ExS.ite eLT (truthy_boolVal false) hPOSexec
   have hIntmin : NANO.toInt32 (rd32le d 22) ≠ -2147483648 := by omega
-  obtain ⟨s', code, hpost, hcode, hblk⟩ := tail_exs m bd d hm size hs hd hlen obl hob h48
+  obtain ⟨s', code, hpost, hcode, hblk, hUnt⟩ := tail_exs m bd d hm size hs hd hlen obl hob h48
     ro hro
     (rd32le d 22) (rd32_lt d 22)
     0 (by omega)
     hgt hh0 hPl hIntmin
-  refine ⟨s', ?_, fun hh => hblk (hcode ▸ hh)⟩
+  refine ⟨s', ?_, fun hh => hblk (hcode ▸ hh), fun hh j hj => hUnt (hcode ▸ hh) j hj⟩
   rw [← hcode]
   exact ExS.seq hw3 (ExS.seq hw4 (ExS.seq hw5 (ExS.seq hw6 (ExS.seq hw7 (ExS.seq hR_skip
     (ExS.seq hLTexec hpost))))))
@@ -292,7 +293,8 @@ theorem ni_bmp_geometry_exs_neg_intmin (m : Mem) (bd : Nat) (d : List UInt8) (hm
       (.ret (some (.int ⟨32, true⟩ (bmpGeometryCode d)))) s' ∧
     (bmpGeometryCode d = 0 → s'.mem 3 =
       some (bmpTailBlock obl (rd32le d 18) 2147483648 (rd16le d 28)
-        (if rd16le d 28 = 32 then 4 else 3) 1)) := by
+        (if rd16le d 28 = 32 then 4 else 3) 1)) ∧
+    (bmpGeometryCode d = 0 → ∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h34 : 34 ≤ d.length := hd
   let s5 : State :=
     { locals := ((frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0]).upd 3 (.int ⟨32, true⟩ (rd32le d 18))
@@ -491,7 +493,8 @@ theorem ni_bmp_geometry_exs_neg_intmin (m : Mem) (bd : Nat) (d : List UInt8) (hm
   have hbv : bmpGeometryCode d = 4 := by
     have hgt' : ¬ (NANO.toInt32 (rd32le d 18) ≤ 0) := by omega
     simp [bmpGeometryCode, hgt', hh0, hPl, hInMin]
-  refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide)⟩
+  refine ⟨s5, ?_, fun hb => by rw [hbv] at hb; exact absurd hb (by decide),
+    fun _ _ _ => rfl⟩
   rw [hbv]
   exact ExS.seq hw3 (ExS.seq hw4 (ExS.seq hw5 (ExS.seq hw6 (ExS.seq hw7 (ExS.seq hR_skip
     (ExS.seq_ret hLTexec))))))

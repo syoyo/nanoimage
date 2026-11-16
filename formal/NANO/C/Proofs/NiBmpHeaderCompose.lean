@@ -79,7 +79,8 @@ theorem header_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h
       (.seq (.store (.int ⟨8, false⟩) (.field (.var 2) 43) (.var 10))
                   (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0))))))))))
       (Outcome.ret (some (.int ⟨32, true⟩ 0))) s' ∧
-    s'.mem 3 = some (bmpHeadBlock obl w h po b c t) := by
+    s'.mem 3 = some (bmpHeadBlock obl w h po b c t) ∧
+    (∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h2 : EvE Gen.prog ⟨l, m, ro⟩ (.var 2) (.ptr 3 0) := EvE.var hl2
   have h7 : EvE Gen.prog ⟨l, m, ro⟩ (.var 7) (.int ⟨32, false⟩ w) := EvE.var hl7
   have h8 : EvE Gen.prog ⟨l, m, ro⟩ (.var 8) (.int ⟨32, false⟩ h) := EvE.var hl8
@@ -162,8 +163,12 @@ theorem header_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h
   have hret : ExS Gen.prog s6 (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0))))
       (Outcome.ret (some (.int ⟨32, true⟩ 0))) s6 :=
     ExS.ret (EvE.const (v := (.int ⟨32, true⟩ 0)))
-  refine ⟨s6, ExS.seq hW (ExS.seq hH (ExS.seq hP (ExS.seq hBP (ExS.seq hCH (ExS.seq hTD hret))))), ?_⟩
-  rw [hMem6, hFinal]
+  refine ⟨s6, ExS.seq hW (ExS.seq hH (ExS.seq hP (ExS.seq hBP (ExS.seq hCH (ExS.seq hTD hret))))), ?_, ?_⟩
+  · rw [hMem6, hFinal]
+  · intro j hj
+    show (((((m.upd 3 b1).upd 3 b2).upd 3 b3).upd 3 b4).upd 3 b5).upd 3 (b5.take 43 ++ encodeLE 1 t ++ b5.drop 44) j = m j
+    rw [mem_upd_other_blk _ 3 j _ hj, mem_upd_other_blk _ 3 j _ hj, mem_upd_other_blk _ 3 j _ hj,
+        mem_upd_other_blk _ 3 j _ hj, mem_upd_other_blk _ 3 j _ hj, mem_upd_other_blk _ 3 j _ hj]
 
 end NANO.C.Proofs
 
@@ -349,8 +354,9 @@ theorem ni_bmp_header_geom_call_exs (s6 : State) (d : List UInt8) (bd : Nat) (hm
       s7.locals 11 = some (.int ⟨32, true⟩ (bmpGeometryCode d)) ∧
       s7.ro = false ∧
       bmpGeometryCode d ≤ 6 ∧
-      ∀ hG0 : bmpGeometryCode d = 0, s7.mem 3 = some (geomOutBlock obl d) := by
-  obtain ⟨sGeo, exGeo, hblk0⟩ := ni_bmp_geometry_exs s6.mem bd d hm size hs (by omega) hlen obl hob h48 s6.ro hS6ro
+      (∀ hG0 : bmpGeometryCode d = 0, s7.mem 3 = some (geomOutBlock obl d)) ∧
+      (∀ hG0 : bmpGeometryCode d = 0, ∀ j, j ≠ 3 → s7.mem j = s6.mem j) := by
+  obtain ⟨sGeo, exGeo, hblk0, hUnt0⟩ := ni_bmp_geometry_exs s6.mem bd d hm size hs (by omega) hlen obl hob h48 s6.ro hS6ro
   have hread2 : s6.locals 2 = some (.ptr 3 0) := hl2
   have hread0 : s6.locals 0 = some (.ptr bd 0) := hl0
   have hread1 : s6.locals 1 = some (.int ⟨64, false⟩ size) := hl1
@@ -382,7 +388,11 @@ theorem ni_bmp_header_geom_call_exs (s6 : State) (d : List UInt8) (bd : Nat) (hm
   have hl11_7 : s7.locals 11 = some (.int ⟨32, true⟩ (bmpGeometryCode d)) := rfl
   have hS7ro : s7.ro = false := by rw [show s7.ro = s6.ro from rfl]; exact hS6ro
   have hSm : bmpGeometryCode d ≤ 6 := bmpGeometryCode_bound d
-  exact ⟨s7, hwG, hl1_7, hl2_7, hl3_7, hl4_7, hl6_7, hl11_7, hS7ro, hSm, hblk0⟩
+  exact ⟨s7, hwG, hl1_7, hl2_7, hl3_7, hl4_7, hl6_7, hl11_7, hS7ro, hSm, hblk0,
+    fun hG0 j hj => by
+      show s7.mem j = s6.mem j
+      rw [show s7.mem = sGeo.mem from rfl]
+      exact hUnt0 hG0 j hj⟩
 
 theorem ni_bmp_header_prelude_ok_exs (s6 : State) (d : List UInt8) (bd : Nat) (hm : s6.mem bd = some d)
     (size : Nat) (hs : size ≤ d.length) (hd : 54 ≤ d.length) (hlen : d.length < 2 ^ 64)
@@ -411,10 +421,11 @@ theorem ni_bmp_header_prelude_ok_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
       s12.locals 8 = some (.int ⟨32, false⟩ ((NANO.toInt32 (rd32le d 22)).natAbs)) ∧
       s12.locals 9 = some (.int ⟨8, false⟩ (if rd16le d 28 = 32 then 4 else 3)) ∧
       s12.locals 10 = some (.int ⟨8, false⟩ (if NANO.toInt32 (rd32le d 22) < 0 then 1 else 0)) ∧
-      s12.ro = false := by
+      s12.ro = false ∧
+      (∀ j, j ≠ 3 → s12.mem j = s6.mem j) := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
-  obtain ⟨s7, hwG, hl1_7, hl2_7, hl3_7, hl4_7, hl6_7, hl11_7, hS7ro, hSm, hMem⟩ :=
+  obtain ⟨s7, hwG, hl1_7, hl2_7, hl3_7, hl4_7, hl6_7, hl11_7, hS7ro, hSm, hMem, hUntG⟩ :=
     ni_bmp_header_geom_call_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hl0 hl2 hl1 hl3 hl4 hl6
   have hNot16F : EvE Gen.prog s7
       (.bin .ne (some ⟨32, true⟩) (.var 11) (.const (.int ⟨32, true⟩ 0))) (boolVal false) := by
@@ -574,7 +585,10 @@ theorem ni_bmp_header_prelude_ok_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
     rw [hTRo, hCRo, hBRo, hHRo, hWRo, hS7ro]
 
   refine ⟨gout, s12, ?_, hg_len, hob'12, hHb, hWle, hBl, hCh,
-    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro⟩
+    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro,
+    fun j hj => by
+      rw [show s12.mem = s7.mem from by rw [hTMem, hCMem, hBMem, hHMem, hWMem]]
+      exact hUntG hG0 j hj⟩
   exact ExS.seq hwG (ExS.seq hGeSkip (ExS.seq hW (ExS.seq hH (ExS.seq hB (ExS.seq hC hT)))))
 
 /-- The `ni_bmp_header_palette` call itself, exposing the final state facts
@@ -606,13 +620,15 @@ theorem ni_bmp_header_palette_call_exs (s13 : State) (d : List UInt8)
       s14.locals 13 = some (.int ⟨32, true⟩
         (bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10))) ∧
       s14.ro = false ∧
-      ∀ (hPcr0 : bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0),
+      (∀ (hPcr0 : bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0),
         s14.mem 3 = some (bmpPaletteBlock (bmpArithBlock gout
           (bmpRowStride (rd32le d 18) (rd16le d 28))
           (bmpOutSize (rd32le d 18) (if rd16le d 28 = 32 then 4 else 3) ((NANO.toInt32 (rd32le d 22)).natAbs)))
           (if rd16le d 28 = 8 then 14 + rd32le d 14 else 0)
-          (if rd16le d 28 = 8 then (if rd32le d 46 = 0 then 256 else rd32le d 46) else 0)) := by
-  obtain ⟨sP, exP, hPblk⟩ := ni_bmp_header_palette_exs s13.mem
+          (if rd16le d 28 = 8 then (if rd32le d 46 = 0 then 256 else rd32le d 46) else 0))) ∧
+      (∀ (hPcr0 : bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0),
+        ∀ j, j ≠ 3 → s14.mem j = s13.mem j) := by
+  obtain ⟨sP, exP, hPblk, hPUnt⟩ := ni_bmp_header_palette_exs s13.mem
     (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10)
     (rd16le_lt d 28) (rd32_lt d 46) (rd32_lt d 14) (rd32_lt d 10)
     (bmpArithBlock gout
@@ -653,7 +669,11 @@ theorem ni_bmp_header_palette_call_exs (s13 : State) (d : List UInt8)
   have hl8_14 : s14.locals 8 = s13.locals 8 := rfl
   have hl9_14 : s14.locals 9 = s13.locals 9 := rfl
   have hl10_14 : s14.locals 10 = s13.locals 10 := rfl
-  exact ⟨s14, hCallP, hl1_14, hl2_14, hl3_14, hl4_14, hl5_14, hl6_14, hl7_14, hl8_14, hl9_14, hl10_14, hl13, hS14ro, hPblk⟩
+  exact ⟨s14, hCallP, hl1_14, hl2_14, hl3_14, hl4_14, hl5_14, hl6_14, hl7_14, hl8_14, hl9_14, hl10_14, hl13, hS14ro, hPblk,
+    fun hPcr0 j hj => by
+      show s14.mem j = s13.mem j
+      rw [show s14.mem = sP.mem from rfl]
+      exact hPUnt hPcr0 j hj⟩
 
 theorem ni_bmp_header_rem_geom_fail_exs (s6 : State) (d : List UInt8) (bd : Nat) (hm : s6.mem bd = some d)
     (size : Nat) (hs : size ≤ d.length) (hd : 54 ≤ d.length) (hlen : d.length < 2 ^ 64)
@@ -670,7 +690,7 @@ theorem ni_bmp_header_rem_geom_fail_exs (s6 : State) (d : List UInt8) (bd : Nat)
     ∃ s', ExS Gen.prog s6 ni_bmp_header_rem_stmt (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
-  obtain ⟨s7, hwG, hl1_7, hl2_7, hl3_7, hl4_7, hl6_7, hl11_7, hS7ro, hSm, hMem⟩ :=
+  obtain ⟨s7, hwG, hl1_7, hl2_7, hl3_7, hl4_7, hl6_7, hl11_7, hS7ro, hSm, hMem, _⟩ :=
     ni_bmp_header_geom_call_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hl0 hl2 hl1 hl3 hl4 hl6
   have hG' : bmpGeometryCode d ≠ 0 := hG0
   have hNot16T : EvE Gen.prog s7
@@ -726,10 +746,10 @@ theorem ni_bmp_header_rem_arith_fail_exs (s6 : State) (d : List UInt8) (bd : Nat
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   obtain ⟨gout, s12, hP, hg_len, hob'12, hHb, hWle, hBl, hCh,
-    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro⟩ :=
+    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro, hPreUnt⟩ :=
     ni_bmp_header_prelude_ok_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout hl0 hl2 hl1 hl3 hl4 hl6 hG0
   -- ========== arith call ==========
-  obtain ⟨sA, exA, hAblk⟩ := ni_bmp_header_arith_exs s12.mem
+  obtain ⟨sA, exA, hAblk, hAUnt⟩ := ni_bmp_header_arith_exs s12.mem
     (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28) (if rd16le d 28 = 32 then 4 else 3)
     (rd32le d 10) size
     (rd32_lt d 18) (by omega) (rd16le_lt d 28) (by omega) (rd32_lt d 10) (by omega)
@@ -840,13 +860,14 @@ theorem ni_bmp_header_rem_stores_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size = 0)
     (hPcr : bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0) :
     ∃ s', ExS Gen.prog s6 ni_bmp_header_rem_stmt (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' ∧
-      ∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48 := by
+      (∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48) ∧
+      (∀ j, j ≠ 3 → s'.mem j = s6.mem j) := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   obtain ⟨gout, s12, hP, hg_len, hob'12, hHb, hWle, hBl, hCh,
-    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro⟩ :=
+    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro, hPreUnt⟩ :=
     ni_bmp_header_prelude_ok_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout hl0 hl2 hl1 hl3 hl4 hl6 hG0
-  obtain ⟨sA, exA, hAblk⟩ := ni_bmp_header_arith_exs s12.mem
+  obtain ⟨sA, exA, hAblk, hAUnt⟩ := ni_bmp_header_arith_exs s12.mem
     (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28) (if rd16le d 28 = 32 then 4 else 3)
     (rd32le d 10) size
     (rd32_lt d 18) (by omega) (rd16le_lt d 28) (by omega) (rd32_lt d 10) (by omega)
@@ -907,7 +928,7 @@ theorem ni_bmp_header_rem_stores_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
   have hBkLen : (bmpArithBlock gout
       (bmpRowStride (rd32le d 18) (rd16le d 28)) (bmpOutSize (rd32le d 18) (if rd16le d 28 = 32 then 4 else 3) ((NANO.toInt32 (rd32le d 22)).natAbs))).length = 48 :=
     bmpArithBlock_length gout hg_len _ _
-  obtain ⟨s14, hCallP, h1_14, h2_14, h3_14, h4_14, h5_14, h6_14, h7_14, h8_14, h9_14, h10_14, hl13, hS14ro, hPblk⟩ :=
+  obtain ⟨s14, hCallP, h1_14, h2_14, h3_14, h4_14, h5_14, h6_14, h7_14, h8_14, h9_14, h10_14, hl13, hS14ro, hPblk, hPUnt⟩ :=
     ni_bmp_header_palette_call_exs s13 d gout hg_len hAblkEq hBkLen hS13ro
       hl5_13 hl6_13 hl4_13 hl3_13 hl2_13 hl7_13 hl8_13 hl9_13 hl10_13
   have hl2_14 : s14.locals 2 = some (.ptr 3 0) := h2_14.trans hl2_13
@@ -966,12 +987,14 @@ theorem ni_bmp_header_rem_stores_exs (s6 : State) (d : List UInt8) (bd : Nat) (h
       (if rd16le d 28 = 8 then 14 + rd32le d 14 else 0)
       (if rd16le d 28 = 8 then (if rd32le d 46 = 0 then 256 else rd32le d 46) else 0)).length = 48 :=
     bmpPaletteBlock_length _ (bmpArithBlock_length gout hg_len _ _) _ _
-  obtain ⟨s', hStores, hStoresMem⟩ := header_stores_exs s14.mem _ hBlockFin hBkLen2 s14.ro hS14ro s14.locals hl2_14
+  obtain ⟨s', hStores, hStoresMem, hStUnt⟩ := header_stores_exs s14.mem _ hBlockFin hBkLen2 s14.ro hS14ro s14.locals hl2_14
     (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd32le d 10)
     (rd32_lt d 18) (by omega) (rd32_lt d 10)
     (rd16le d 28) (if rd16le d 28 = 32 then 4 else 3) (if NANO.toInt32 (rd32le d 22) < 0 then 1 else 0)
     (rd16le_lt d 28) (by omega) (by by_cases h : NANO.toInt32 (rd32le d 22) < 0 <;> simp [h]) hl7_14 hl8_14 hl3_14 hl5_14 hl9_14 hl10_14
-  refine ⟨s', ?_, ⟨gout, hStoresMem, hg_len⟩⟩
+  refine ⟨s', ?_, ⟨gout, hStoresMem, hg_len⟩, fun j hj => by
+    rw [hStUnt j hj, hPUnt hPcr j hj, show s13.mem = sA.mem from rfl]
+    rw [hAUnt hAcr j hj, hPreUnt j hj]⟩
   show ExS Gen.prog s6 ni_bmp_header_rem_stmt (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s'
   rw [hSpec]
   have h12skipV12 : EvE Gen.prog s13
@@ -1024,9 +1047,9 @@ theorem ni_bmp_header_rem_palette_bad_exs (s6 : State) (d : List UInt8) (bd : Na
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   obtain ⟨gout, s12, hP, hg_len, hob'12, hHb, hWle, hBl, hCh,
-    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro⟩ :=
+    hl1_12, hl2_12, hl3_12, hl4_12, hl5_12, hl6_12, hl7_12, hl8_12, hl9_12, hl10_12, hS12ro, hPreUnt⟩ :=
     ni_bmp_header_prelude_ok_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout hl0 hl2 hl1 hl3 hl4 hl6 hG0
-  obtain ⟨sA, exA, hAblk⟩ := ni_bmp_header_arith_exs s12.mem
+  obtain ⟨sA, exA, hAblk, hAUnt⟩ := ni_bmp_header_arith_exs s12.mem
     (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28) (if rd16le d 28 = 32 then 4 else 3)
     (rd32le d 10) size
     (rd32_lt d 18) (by omega) (rd16le_lt d 28) (by omega) (rd32_lt d 10) (by omega)
@@ -1087,7 +1110,7 @@ theorem ni_bmp_header_rem_palette_bad_exs (s6 : State) (d : List UInt8) (bd : Na
   have hBkLen : (bmpArithBlock gout
       (bmpRowStride (rd32le d 18) (rd16le d 28)) (bmpOutSize (rd32le d 18) (if rd16le d 28 = 32 then 4 else 3) ((NANO.toInt32 (rd32le d 22)).natAbs))).length = 48 :=
     bmpArithBlock_length gout hg_len _ _
-  obtain ⟨s14, hCallP, h1_14, h2_14, h3_14, h4_14, h5_14, h6_14, h7_14, h8_14, h9_14, h10_14, hl13, hS14ro, hPblk⟩ :=
+  obtain ⟨s14, hCallP, h1_14, h2_14, h3_14, h4_14, h5_14, h6_14, h7_14, h8_14, h9_14, h10_14, hl13, hS14ro, hPblk, hPUnt⟩ :=
     ni_bmp_header_palette_call_exs s13 d gout hg_len hAblkEq hBkLen hS13ro
       hl5_13 hl6_13 hl4_13 hl3_13 hl2_13 hl7_13 hl8_13 hl9_13 hl10_13
   have hl2_14 : s14.locals 2 = some (.ptr 3 0) := h2_14.trans hl2_13
@@ -1187,31 +1210,48 @@ theorem ni_bmp_header_rem_exs (s6 : State) (d : List UInt8) (bd : Nat) (hm : s6.
     (hl6 : s6.locals 6 = some (.int ⟨32, false⟩ (rd32le d 46))) :
     ∃ s', ExS Gen.prog s6 ni_bmp_header_rem_stmt
       (.ret (some (.int ⟨32, true⟩ (bmpHeaderCode size d)))) s' ∧
-      (bmpGeometryCode d = 0 →
+      ((bmpGeometryCode d = 0 →
        bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
          (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size = 0 →
        bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0 →
-       ∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48) := by
+       ∃ gout, s'.mem 3 = some (bmpHeaderFinalBlock d gout) ∧ gout.length = 48) ∧
+       (bmpGeometryCode d = 0 →
+       bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
+         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size = 0 →
+       bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10) = 0 →
+       ∀ j, j ≠ 3 → s'.mem j = s6.mem j)) := by
   classical
   by_cases hG0 : bmpGeometryCode d = 0
   · by_cases hAcr : (bmpOutputArithCode (rd32le d 18) ((NANO.toInt32 (rd32le d 22)).natAbs) (rd16le d 28)
         (if rd16le d 28 = 32 then 4 else 3) (rd32le d 10) size) = 0
     · by_cases hPcr : (bmpOutputPaletteCode (rd16le d 28) (rd32le d 46) (rd32le d 14) (rd32le d 10)) = 0
-      · obtain ⟨s', hEx, ⟨gout, hMem, hglen⟩⟩ :=
+      · obtain ⟨s', hEx, ⟨gout, hMem, hglen⟩, hStUnt⟩ :=
           ni_bmp_header_rem_stores_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
             hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr hPcr
-        exact ⟨s', hEx, fun _ _ _ => ⟨gout, hMem, hglen⟩⟩
+        exact ⟨s', hEx, (fun _ _ _ => ⟨gout, hMem, hglen⟩), fun _ _ _ j hj => hStUnt j hj⟩
       · obtain ⟨s', hEx⟩ :=
           ni_bmp_header_rem_palette_bad_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
             hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr hPcr
-        exact ⟨s', hEx, fun _ _ hp => absurd hp hPcr⟩
+        exact ⟨s', hEx, (fun _ _ hp => absurd hp hPcr), fun hg ha hp j hj => by
+        first
+          | exact absurd hg hG0
+          | exact absurd ha hAcr
+          | exact absurd hp hPcr⟩
     · obtain ⟨s', hEx⟩ :=
         ni_bmp_header_rem_arith_fail_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
           hl0 hl2 hl1 hl3 hl4 hl6 hG0 hAcr
-      exact ⟨s', hEx, fun _ ha _ => absurd ha hAcr⟩
+      exact ⟨s', hEx, (fun _ ha _ => absurd ha hAcr), fun hg ha hp j hj => by
+        first
+          | exact absurd hg hG0
+          | exact absurd ha hAcr
+          | exact absurd hp hPcr⟩
   · obtain ⟨s', hEx⟩ :=
       ni_bmp_header_rem_geom_fail_exs s6 d bd hm size hs hd hlen obl hob h48 hS6ro hSig hLayout
         hl0 hl2 hl1 hl3 hl4 hl6 hG0
-    exact ⟨s', hEx, fun hg _ _ => absurd hg hG0⟩
+    exact ⟨s', hEx, (fun hg _ _ => absurd hg hG0), fun hg ha hp j hj => by
+        first
+          | exact absurd hg hG0
+          | exact absurd ha hAcr
+          | exact absurd hp hPcr⟩
 
 end NANO.C.Proofs

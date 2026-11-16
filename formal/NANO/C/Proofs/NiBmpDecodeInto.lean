@@ -54,8 +54,8 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
     (hpx64 : h.pixelOffset + h.rowStride * h.height < 2 ^ 64)
     (hpalok : h.paletteOffset + h.paletteEntries * 4 ≤ h.pixelOffset)
     (hpx8 : ∀ y i, y < h.height → i < h.width → h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + i < d.length)
-    (hpos8 : ∀ y i, y < h.height → i < h.width → h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + i) * 4 + 3 ≤ d.length)
-    (hidx8 : ∀ y i, y < h.height → i < h.width → byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + i) < h.paletteEntries)
+    (hpos8 : h.bitCount = 8 → ∀ y i, y < h.height → i < h.width → h.paletteOffset + byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + i) * 4 + 3 ≤ d.length)
+    (hidx8 : h.bitCount = 8 → ∀ y i, y < h.height → i < h.width → byteAt d (h.pixelOffset + (if h.topDown = 1 then y else h.height - 1 - y) * h.rowStride + i) < h.paletteEntries)
     (hok : ∀ y i, y < h.height → i < h.width → ∃ bs, bmpPixel d h y i = .ok bs)
     (hwidth : 1 ≤ h.width)
     (ro : Bool) (hro : ro = false) :
@@ -403,7 +403,7 @@ theorem ni_bmp_decode_into_ok_exs (m : Mem) (d obl : List UInt8)
             ac_rfl
           rw [← e]
           exact hout)
-        hobl64 hpx8 hpos8 hidx8 hok hwidth ro hro
+        hobl64 hpx8 (hpos8 hbc8i) (hidx8 hbc8i) hok hwidth ro hro
         h.height 0 s8 (by omega) (by omega)
         hl0_8 hl2_8 hl3_8 hl5_8 hl7_8 hl8_8 hl9_8 hl10_8 hl11_8 hl12_8 hl13_8 hros
         hmem0 hmembd0 hmem20

@@ -42,7 +42,8 @@ theorem bmp_arith_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl)
             (.seq (.store (.int ⟨64, false⟩) (.field (.var 6) 8) (.var 8))
                   (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0))))))
       (Outcome.ret (some (.int ⟨32, true⟩ 0))) s' ∧
-    s'.mem 3 = some (bmpArithBlock obl rs os) := by
+    s'.mem 3 = some (bmpArithBlock obl rs os) ∧
+    (∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h2 : EvE Gen.prog ⟨l, m, ro⟩ (.var 6) (.ptr 3 0) := EvE.var hl6
   have h7 : EvE Gen.prog ⟨l, m, ro⟩ (.var 7) (.int ⟨64, false⟩ rs) := EvE.var hl7
   have h8 : EvE Gen.prog ⟨l, m, ro⟩ (.var 8) (.int ⟨64, false⟩ os) := EvE.var hl8
@@ -80,10 +81,14 @@ theorem bmp_arith_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl)
           List.take_take, List.drop_drop, List.nil_append, List.append_nil, List.drop_zero]
   have hfin : ((m.upd 3 b1).upd 3 b2) = m.upd 3 (bmpArithBlock obl rs os) := by
     rw [mem_upd_same, hblk]
-  refine ⟨s2, ExS.seq hS1 (ExS.seq hS2 hret), ?_⟩
-  show s2.mem 3 = some (bmpArithBlock obl rs os)
-  rw [show s2.mem = ((m.upd 3 b1).upd 3 b2) from rfl, hfin]
-  rfl
+  refine ⟨s2, ExS.seq hS1 (ExS.seq hS2 hret), ?_, ?_⟩
+  · show s2.mem 3 = some (bmpArithBlock obl rs os)
+    rw [show s2.mem = ((m.upd 3 b1).upd 3 b2) from rfl, hfin]
+    rfl
+  · intro j hj
+    show (((m.upd 3 b1).upd 3 b2)) j = m j
+    rw [mem_upd_same]
+    exact mem_upd_other_blk m 3 j _ hj
 
 /-- Row stride, matching `bmpOutputArithCode`'s internal expression. -/
 theorem bmpRowStride_def (W b : Nat) : bmpRowStride W b = ((W * b + 31) / 32) * 4 := rfl
@@ -194,7 +199,9 @@ theorem ni_bmp_header_arith_exs (m : Mem)
       Gen.ni_bmp_header_arith.body
       (.ret (some (.int ⟨32, true⟩ (bmpOutputArithCode width height bitCount channels pixelOffset size)))) s' ∧
     (bmpOutputArithCode width height bitCount channels pixelOffset size = 0 →
-      s'.mem 3 = some (bmpArithBlock obl (bmpRowStride width bitCount) (bmpOutSize width channels height))) := by
+      s'.mem 3 = some (bmpArithBlock obl (bmpRowStride width bitCount) (bmpOutSize width channels height))) ∧
+    (bmpOutputArithCode width height bitCount channels pixelOffset size = 0 →
+      ∀ j, j ≠ 3 → s'.mem j = m j) := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   let s0 : State :=
@@ -529,7 +536,7 @@ theorem ni_bmp_header_arith_exs (m : Mem)
               (boolVal true) :=
             EvE.lor_true hlt1 truthy_true
           exact ExS.ite he truthy_true (ExS.ret (EvE.const _))
-        refine ⟨s4, ?_, ?_⟩
+        refine ⟨s4, ?_, ?_, fun _ _ _ => rfl⟩
         · show ExS Gen.prog s0 Gen.ni_bmp_header_arith.body
               (.ret (some (.int ⟨32, true⟩ (bmpOutputArithCode width height bitCount channels pixelOffset size)))) s4
           rw [hSpec]
@@ -602,7 +609,7 @@ theorem ni_bmp_header_arith_exs (m : Mem)
                 (boolVal true) :=
               EvE.lor_false hlt1 truthy_false hlt2 truthy_true
             exact ExS.ite he truthy_true (ExS.ret (EvE.const _))
-          refine ⟨s4, ?_, ?_⟩
+          refine ⟨s4, ?_, ?_, fun _ _ _ => rfl⟩
           · show ExS Gen.prog s0 Gen.ni_bmp_header_arith.body
                 (.ret (some (.int ⟨32, true⟩ (bmpOutputArithCode width height bitCount channels pixelOffset size)))) s4
             rw [hSpec]
@@ -677,10 +684,10 @@ theorem ni_bmp_header_arith_exs (m : Mem)
                 (boolVal false) :=
               EvE.lor_false hlt1 truthy_false hlt2 truthy_false
             exact ExS.ite he truthy_false ExS.skip
-          obtain ⟨s5, hStores, hblk⟩ := bmp_arith_stores_exs s4.mem obl hob h48 ro hro s4.locals hl6_4
+          obtain ⟨s5, hStores, hblk, hUnt⟩ := bmp_arith_stores_exs s4.mem obl hob h48 ro hro s4.locals hl6_4
             (bmpRowStride width bitCount) (width * channels * height)
             (by omega) (by omega) hl7_4 hl8_4
-          refine ⟨s5, ?_, ?_⟩
+          refine ⟨s5, ?_, ?_, fun _ j hj => hUnt j hj⟩
           · show ExS Gen.prog s0 Gen.ni_bmp_header_arith.body
                 (.ret (some (.int ⟨32, true⟩ (bmpOutputArithCode width height bitCount channels pixelOffset size)))) s5
             rw [hSpec]
@@ -725,7 +732,7 @@ theorem ni_bmp_header_arith_exs (m : Mem)
             (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 9)))) .skip)
           (Outcome.ret (some (.int ⟨32, true⟩ 9))) s3 :=
         ExS.ite hNot4 truthy_true (ExS.ret (EvE.const _))
-      refine ⟨s3, ?_, ?_⟩
+      refine ⟨s3, ?_, ?_, fun _ _ _ => rfl⟩
       · show ExS Gen.prog s0 Gen.ni_bmp_header_arith.body
             (.ret (some (.int ⟨32, true⟩ (bmpOutputArithCode width height bitCount channels pixelOffset size)))) s3
         rw [hSpec]
@@ -771,7 +778,7 @@ theorem ni_bmp_header_arith_exs (m : Mem)
           (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 8)))) .skip)
         (Outcome.ret (some (.int ⟨32, true⟩ 8))) s2 :=
       ExS.ite hNot3 truthy_true (ExS.ret (EvE.const _))
-    refine ⟨s2, ?_, ?_⟩
+    refine ⟨s2, ?_, ?_, fun _ _ _ => rfl⟩
     · show ExS Gen.prog s0 Gen.ni_bmp_header_arith.body
           (.ret (some (.int ⟨32, true⟩ (bmpOutputArithCode width height bitCount channels pixelOffset size)))) s2
       rw [hSpec]

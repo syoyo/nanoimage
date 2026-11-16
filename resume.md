@@ -41,66 +41,33 @@ Phase 0 (infrastructure) done. Phase 1 (shared leaves) done. Phase 2 (BMP):
 - Gates all green: `make test`, `make lean-check` (lake build + c2lean
   --check), `make lean-diff` (4200 cases, 0 mismatches).
 
-## Current work in progress: `ni_bmp_load_exs` (NiBmpLoad.lean)
+## Phase 2 is COMPLETE (commit C3)
 
-The composite: `.seq (.call (some 17) 15 [v0,v1,v2]) (.seq (.ite (.ne (var 17)
-0) (.ret (var 17)) .skip) (.seq (.call none 16 [v0..v4]) (.ret 0)))` over
-frameLocals [0,1,2,3,4,17] — returns `bmpHeaderCode size d`; on success runs
-the decode and the out block holds `bmpRowsBytes d H H.height ++ out.drop (H.height *
-bmpRowSize H)` with `H := bmpHeaderInfoOf d`, plus `bmpHeader size d = .ok H`.
+`ni_bmp_load_exs` (`NiBmpLoad.lean`) is proven: under the five stage verdicts,
+header (fid 15) then decode (fid 16) returns 0 and the output block holds the
+flattened `bmpPixels` bytes for `h = bmpHeaderInfoOf d`; axioms
+`[propext, Classical.choice, Quot.sound]`. All gates green (`make test`,
+`make lean-check`, cdiff).
 
-**Blocker found**: `ni_bmp_decode_into_ok_exs` is stated over the 26-local
-frame (`frameLocals [0..25] …`), but a call creates the 5-param frame
-(`frameLocals [0,1,2,3,4] …`, locals ≥ 5 unbound). `loop2_iter` and
-`loop3_iter` carry an over-strong `s.locals 25 = some (.int ⟨32,true⟩ 0)`
-hypothesis (threaded as an invariant); local 25 is *written before it is ever
-read* (loop2's `call_dst (some 25) 20 …`), so the hypothesis can simply be
-dropped.
+Key pieces added to get there:
+- Framing exports `∀ b ≠ 3, s'.mem b = s.mem b` on every header stage
+  (`mem_upd_other_blk` peel; threaded through geometry/arith/palette/stores/
+  prelude/rem/header).
+- Decode chain: locals-25 invariant dropped from `loop2_iter`/`loop3_iter`;
+  info block unified to 3; `ni_bmp_decode_into_ok_exs` over the 5-param call
+  frame; palette-read bounds (`hpos8`/`hidx8`) conditional on `bitCount = 8`.
+- `ExS.call_ret` (Logic.lean); `bmpHeaderInfoOf` + `bmpHeader_ok_of_stages`;
+  the ten `bmpHeaderFinalBlock` field slices; the bound bundles
+  `bmpHeaderInfoOf_stage_facts` (17-way conjunction), `_px8`, `_pos8`,
+  `_idx8` (factor monolithic derivations — the kernel chokes otherwise).
 
-## Next steps, in order
+## Next: Phase 3 — TGA
 
-1. **Weaken the loop iter invariants**:
-   a. `NiBmpLoop2.lean` `loop2_iter`: drop `s.locals 25 = some (.int 32t 0)`
-      from the hypotheses (line ~91), from the conclusion (line ~103), the
-      intros (lines ~107/145), the zero-case `exact hl25` (line ~142) and its
-      `refine` slot, and the succ-case threading (`h25b` stays — it is
-      re-derived from the per-pixel call's return by `rfl`; drop `hl25_3`,
-      the IH arg at line ~431, and the `hLoc25'` export/arg). Keep the
-      general preservation `∀ j, j ≠ 6 → j ≠ 23 → j ≠ 24 → j ≠ 25 → …`
-      unchanged. Update the wrapper `ni_bmp_decode_into_loop2_ok_exs`
-      accordingly (it may keep its own frame; just pass fewer args).
-   b. `NiBmpLoop5.lean` `loop3_iter`: same treatment (hypothesis line ~63,
-      intros ~73/101, the `s1.locals 25` extract at ~307, `hl25_5` at ~396,
-      the recursive-call arg list at ~406, and the export). **Keep the
-      `locals 19` hypotheses** — local 19 (src_channels) is genuinely read
-      by loop2's dst_base computation.
-2. **Restate the decode theorem over the call frame**: in
-   `NiBmpDecodeInto.lean`, change the theorem's frame to
-   `frameLocals [0,1,2,3,4] [.ptr bd 0, .int u64 d.length, .ptr 2 0, .ptr ob 0,
-   .int u64 obl.length]` (info block = 2, the harness convention), delete the
-   `hl25` have, and rebuild the pointwise facts (locals 0-4 by rfl; 7..13 via
-   the existing extract chains; 5/19 after their sets). Everything else in
-   the proof is frame-agnostic.
-3. **Assemble `ni_bmp_load_exs`** (NiBmpLoad.lean):
-   - `ExS.call_dst` for the header call (args `[v0,v1,v2]`, dst 17) using
-     `ni_bmp_header_exs`'s ExS + its guarded export (hypotheses: the five
-     stage verdicts) → code in local 17, info block = block 2 filled.
-   - Reject path: `ExS.ite` true-branch `.ret (var 17)`; the composite's
-     outcome `.ret (bmpHeaderCode size d)` matches directly.
-   - Success path: `ExS.ite` false-branch skip → `ExS.call_ret` for the
-     decode call (body ExS = the restated decode theorem; baton-pass
-     `bmpHeaderFinalBlock d gout` as `info`, all ten field slices, bounds
-     from `arithCode_unfold` + the prelude-style derivations, `hidx8` from
-     `hok` via `bmpPixel_idx_lt_entries_of_ok`, `hpx8`/`hpos8` from `hpx` +
-     `hpalok` + 8-bit `bmpRowStride w 8 ≥ w` by omega, `hrsd` for the direct
-     path by case analysis on bitCount, `hcap`/`hcap64` as hypotheses) →
-     `.ret 0` = `.ret (bmpHeaderCode size d)` (code = 0).
-   - Close with `bmpHeader_ok_of_stages` for the spec link. Finish with
-     `#print axioms ni_bmp_load_exs` — expect `[propext, Classical.choice,
-     Quot.sound]`.
-4. Update `formal/VERIFICATION.md` (mark the composition row proven) and
-   commit C2.
-5. Phase 3: TGA (see the remaining-work plan, Milestone 2).
+See `~/.commandcode/plans/nanoimage-formal-remaining-phases.md`, Milestone 2:
+C refactor (core/shell split, error codes), translator + Gen regen, spec
+`NANO/Tga.lean` (sequential packet-stream `tgaPixels`), cdiff generator, then
+refinement proofs (header → write_pixel → RLE loops with the
+`pixel_index + count ≤ width*height` invariant). Commits C4/C5.
 
 ## Key implementation notes (Phase 2 + composition work)
 

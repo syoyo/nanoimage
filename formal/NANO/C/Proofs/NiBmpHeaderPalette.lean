@@ -46,7 +46,8 @@ theorem bmp_palette_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some ob
             (.seq (.store (.int ⟨64, false⟩) (.field (.var 4) 16) (.var 6))
                   (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0))))))
       (Outcome.ret (some (.int ⟨32, true⟩ 0))) s' ∧
-    s'.mem 3 = some (bmpPaletteBlock obl po entries) := by
+    s'.mem 3 = some (bmpPaletteBlock obl po entries) ∧
+    (∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h4 : EvE Gen.prog ⟨l, m, ro⟩ (.var 4) (.ptr 3 0) := EvE.var hl4
   have h5 : EvE Gen.prog ⟨l, m, ro⟩ (.var 5) (.int ⟨64, false⟩ entries) := EvE.var hl5
   have h6 : EvE Gen.prog ⟨l, m, ro⟩ (.var 6) (.int ⟨64, false⟩ po) := EvE.var hl6
@@ -85,10 +86,14 @@ theorem bmp_palette_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some ob
           List.append_nil]
   have hfin : ((m.upd 3 b1).upd 3 b2) = m.upd 3 (bmpPaletteBlock obl po entries) := by
     rw [mem_upd_same, hblk]
-  refine ⟨s2, ExS.seq hS1 (ExS.seq hS2 hret), ?_⟩
-  show s2.mem 3 = some (bmpPaletteBlock obl po entries)
-  rw [show s2.mem = ((m.upd 3 b1).upd 3 b2) from rfl, hfin]
-  rfl
+  refine ⟨s2, ExS.seq hS1 (ExS.seq hS2 hret), ?_, ?_⟩
+  · show s2.mem 3 = some (bmpPaletteBlock obl po entries)
+    rw [show s2.mem = ((m.upd 3 b1).upd 3 b2) from rfl, hfin]
+    rfl
+  · intro j hj
+    show (((m.upd 3 b1).upd 3 b2)) j = m j
+    rw [mem_upd_same]
+    exact mem_upd_other_blk m 3 j _ hj
 
 
 /-- The `mid` statement of the 8-bit palette path: `palette_offset` set, then
@@ -299,7 +304,7 @@ theorem palette_case_exs (m : Mem) (s0 : State) (s1 : State)
           s6.locals 4 = s1.locals 4 ∧ s6.locals 5 = s1.locals 5 ∧
           s6.locals 6 = some (.int ⟨64, false⟩ (14 + dibSize)) ∧ s6.mem = s1.mem ∧ s6.ro = s1.ro))
     (obl : List UInt8) (hob : m 3 = some obl) (h48 : obl.length = 48)
-    (hro : s0.ro = false) (hro1 : s1.ro = false)
+    (hro : s0.ro = false) (hro1 : s1.ro = false) (hmm : s1.mem = s0.mem)
     (hl4_1 : s1.locals 4 = some (.ptr 3 0))
     (hl5_1 : s1.locals 5 = some (.int ⟨64, false⟩ entries))
     (hCU : colorsUsed < 4294967296) (hD : dibSize < 4294967296)
@@ -309,7 +314,9 @@ theorem palette_case_exs (m : Mem) (s0 : State) (s1 : State)
     (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset = 0 →
       s'.mem 3 = some (bmpPaletteBlock obl
         (if bitCount = 8 then 14 + dibSize else 0)
-        (if bitCount = 8 then (if colorsUsed = 0 then 256 else colorsUsed) else 0))) := by
+        (if bitCount = 8 then (if colorsUsed = 0 then 256 else colorsUsed) else 0))) ∧
+    (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset = 0 →
+      ∀ j, j ≠ 3 → s'.mem j = s0.mem j) := by
   have hE : entries < 4294967296 := by
     rw [← hEnt]
     by_cases h : colorsUsed = 0
@@ -323,7 +330,8 @@ theorem palette_case_exs (m : Mem) (s0 : State) (s1 : State)
     obtain ⟨hBad, s', hMid⟩ := hFire
     have hSpec : bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset = 10 := by
       simp [bmpOutputPaletteCode, hBC, hEnt, hBad]
-    refine ⟨s', ?_, fun hc => by rw [hSpec] at hc; exact absurd hc (by decide)⟩
+    refine ⟨s', ?_, fun hc => by rw [hSpec] at hc; exact absurd hc (by decide),
+      fun hc _ _ => by rw [hSpec] at hc; exact absurd hc (by decide)⟩
     show ExS Gen.prog s0 Gen.ni_bmp_header_palette.body
         (.ret (some (.int ⟨32, true⟩ (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset)))) s'
     rw [hSpec]
@@ -343,10 +351,10 @@ theorem palette_case_exs (m : Mem) (s0 : State) (s1 : State)
       ExS.ite hEqT truthy_true (ExS.seq hSet5 hMid)
     have hl4_6' : s6.locals 4 = some (.ptr 3 0) := by rw [hl4_6]; exact hl4_1
     have hl5_6' : s6.locals 5 = some (.int ⟨64, false⟩ entries) := by rw [hl5_6]; exact hl5_1
-    obtain ⟨s', hStores, hblk⟩ := bmp_palette_stores_exs s6.mem obl
+    obtain ⟨s', hStores, hblk, hUnt⟩ := bmp_palette_stores_exs s6.mem obl
       (by rw [hmem6]; exact hob1) h48 s6.ro (by rw [hro6]; exact hro1) s6.locals hl4_6'
       (14 + dibSize) entries (by omega) hE hl5_6' hl6_6
-    refine ⟨s', ?_, ?_⟩
+    refine ⟨s', ?_, ?_, fun _ j hj => by rw [hUnt j hj, hmem6, hmm]⟩
     · show ExS Gen.prog s0 Gen.ni_bmp_header_palette.body
           (.ret (some (.int ⟨32, true⟩ (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset)))) s'
       rw [hSpec]
@@ -370,7 +378,9 @@ theorem ni_bmp_header_palette_exs (m : Mem)
     (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset = 0 →
       s'.mem 3 = some (bmpPaletteBlock obl
         (if bitCount = 8 then 14 + dibSize else 0)
-        (if bitCount = 8 then (if colorsUsed = 0 then 256 else colorsUsed) else 0))) := by
+        (if bitCount = 8 then (if colorsUsed = 0 then 256 else colorsUsed) else 0))) ∧
+    (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset = 0 →
+      ∀ j, j ≠ 3 → s'.mem j = m j) := by
   have truthy_true : truthy (boolVal true) = .ok true := truthy_boolVal true
   have truthy_false : truthy (boolVal false) = .ok false := truthy_boolVal false
   let s0 : State :=
@@ -442,7 +452,7 @@ theorem ni_bmp_header_palette_exs (m : Mem)
       obtain h := palette_mid m s1 obl hBC 256 hEnt256 (by omega) hCU hD hP hob h48 hro
         hl1_1 hl2_1 hl3_1 hl4_1 hl5_1
       have hob1 : s1.mem 3 = some obl := hob
-      exact palette_case_exs m s0 s1 hBC hEqT hSet5 256 hEnt256 h obl hob h48 hro hro hl4_1 hl5_1 hCU hD hob1
+      exact palette_case_exs m s0 s1 hBC hEqT hSet5 256 hEnt256 h obl hob h48 hro hro rfl hl4_1 hl5_1 hCU hD hob1
     · -- entries = colorsUsed
       have hne_t : EvE Gen.prog s0
           (.bin .ne (some ⟨32, false⟩) (.var 1) (.const (.int ⟨32, false⟩ 0)))
@@ -468,7 +478,7 @@ theorem ni_bmp_header_palette_exs (m : Mem)
       obtain h := palette_mid m s1 obl hBC colorsUsed hEntCU hCU hCU hD hP hob h48 hro
         hl1_1 hl2_1 hl3_1 hl4_1 hl5_1
       have hob1 : s1.mem 3 = some obl := hob
-      exact palette_case_exs m s0 s1 hBC hEqT hSet5 colorsUsed hEntCU h obl hob h48 hro hro hl4_1 hl5_1 hCU hD hob1
+      exact palette_case_exs m s0 s1 hBC hEqT hSet5 colorsUsed hEntCU h obl hob h48 hro hro rfl hl4_1 hl5_1 hCU hD hob1
   · -- ========== bitCount ≠ 8: entries = offset = 0 ==========
     have hEqF : EvE Gen.prog s0
         (.bin .eq (some ⟨32, false⟩) (.cast ⟨32, false⟩ (.var 0)) (.const (.int ⟨32, false⟩ 8)))
@@ -499,9 +509,9 @@ theorem ni_bmp_header_palette_exs (m : Mem)
     have hl4_1 : s1.locals 4 = some (.ptr 3 0) := rfl
     have hl5_1 : s1.locals 5 = some (.int ⟨64, false⟩ 0) := rfl
     have hl6_1 : s1.locals 6 = some (.int ⟨64, false⟩ 0) := rfl
-    obtain ⟨s', hStores, hblk⟩ := bmp_palette_stores_exs s1.mem obl hob h48 ro hro s1.locals hl4_1
+    obtain ⟨s', hStores, hblk, hUnt⟩ := bmp_palette_stores_exs s1.mem obl hob h48 ro hro s1.locals hl4_1
       0 0 (by decide) (by decide) hl5_1 hl6_1
-    refine ⟨s', ?_, ?_⟩
+    refine ⟨s', ?_, ?_, fun _ j hj => hUnt j hj⟩
     · show ExS Gen.prog s0 Gen.ni_bmp_header_palette.body
           (.ret (some (.int ⟨32, true⟩ (bmpOutputPaletteCode bitCount colorsUsed dibSize pixelOffset)))) s'
       rw [hSpec]

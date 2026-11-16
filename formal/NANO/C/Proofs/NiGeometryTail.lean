@@ -158,6 +158,11 @@ theorem mem_upd_same (m : Mem) (b : Nat) (blk blk' : Block) :
   funext k
   by_cases h : k = b <;> simp [Mem.upd, h]
 
+/-- A store into block `b` leaves every other block untouched. -/
+theorem mem_upd_other_blk (m : Mem) (b j : Nat) (blk : List UInt8) (h : j ≠ b) :
+    (m.upd b blk) j = m j := by
+  simp [Mem.upd, if_neg h]
+
 /-- Same as `store_field_u32`, for u64 fields. -/
 theorem store_field_u64 (m : Mem) (ob : Nat) (obl : List UInt8) (hm : m ob = some obl)
     (hl : obl.length = 48) (off : Nat) (hoff : off + 8 ≤ 48) (v : Nat) (hv : v < 18446744073709551616) :
@@ -257,7 +262,8 @@ theorem bmp_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h48 
             (.seq (.store (.int ⟨8, false⟩) (.field (.var 2) 43) (.var 11))
                   (Stmt.ret (some (Expr.const (Val.int ⟨32, true⟩ 0)))))))))
       (Outcome.ret (some (.int ⟨32, true⟩ 0))) s' ∧
-    s'.mem 3 = some (bmpTailBlock obl w h b c t) := by
+    s'.mem 3 = some (bmpTailBlock obl w h b c t) ∧
+    (∀ j, j ≠ 3 → s'.mem j = m j) := by
   have h2 : EvE Gen.prog ⟨l, m, ro⟩ (.var 2) (.ptr 3 0) := EvE.var hl2
   have h8 : EvE Gen.prog ⟨l, m, ro⟩ (.var 8) (.int ⟨32, false⟩ w) := EvE.var hl8
   have h9 : EvE Gen.prog ⟨l, m, ro⟩ (.var 9) (.int ⟨32, false⟩ h) := EvE.var hl9
@@ -348,7 +354,11 @@ theorem bmp_stores_exs (m : Mem) (obl : List UInt8) (hob : m 3 = some obl) (h48 
     rw [hfin]
     rfl
   refine ⟨{ s4 with mem := (((((m.upd 3 b1).upd 3 b2).upd 3 b3).upd 3 b4).upd 3 (b4.take 43 ++ encodeLE 1 t ++ b4.drop 44)) },
-    ExS.seq hW (ExS.seq hH (ExS.seq hBP (ExS.seq hCH (ExS.seq hTD hret)))), hmem⟩
+    ExS.seq hW (ExS.seq hH (ExS.seq hBP (ExS.seq hCH (ExS.seq hTD hret)))), hmem, ?_⟩
+  intro j hj
+  show (((((((m.upd 3 b1).upd 3 b2).upd 3 b3).upd 3 b4).upd 3 (b4.take 43 ++ encodeLE 1 t ++ b4.drop 44)))) j = m j
+  rw [hfin]
+  exact mem_upd_other_blk m 3 j _ hj
 
 /-- The 48-byte `ni_bmp_info` block when `ni_bmp_geometry` succeeds: depends on
     the sign of `heightI` (the value stored at @28) and on `channels`
@@ -423,7 +433,8 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
       (Outcome.ret (some (.int ⟨32, true⟩ code))) s' ∧
     code = bmpGeometryCode d ∧
     (∀ (hb : code = 0), s'.mem 3 = some (bmpTailBlock obl (rd32le d 18) heightU (rd16le d 28)
-      (if rd16le d 28 = 32 then 4 else 3) topD)) := by
+      (if rd16le d 28 = 32 then 4 else 3) topD)) ∧
+    (∀ (hb : code = 0), ∀ j, j ≠ 3 → s'.mem j = m j) := by
   let s5B : State :=
     { locals := ((frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0]).upd 3 (.int ⟨32, true⟩ (rd32le d 18))
                 |>.upd 4 (.int ⟨32, true⟩ (rd32le d 22))
@@ -473,7 +484,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
       have hgt' : ¬ (NANO.toInt32 (rd32le d 18) ≤ 0) := by omega
       simp [bmpGeometryCode, hgt', hh0, hPl, hCmp, hIntmin]
     exact ⟨ExS.seq hSet8 (ExS.seq_ret hCMPRet), hbv.symm,
-      fun hb => absurd hb (by decide)⟩
+      fun hb => absurd hb (by decide), fun hb _ _ => absurd hb (by decide)⟩
   · have eCmpF : EvE Gen.prog s5C
         (.bin .ne (some ⟨32, false⟩) (.var 7) (.const (.int ⟨32, false⟩ 0)))
         (boolVal false) := by
@@ -572,7 +583,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
       have hl6D : s5D.locals 6 = some (.int ⟨16, false⟩ (rd16le d 28)) := rfl
       have hl10D : s5D.locals 10 = some (.int ⟨8, false⟩ 3) := rfl
       have hl11D : s5D.locals 11 = some (.int ⟨8, false⟩ topD) := rfl
-      obtain ⟨s', hTail, hblk⟩ := bmp_stores_exs m obl hob h48 ro hro s5D.locals hl2D
+      obtain ⟨s', hTail, hblk, hUnt⟩ := bmp_stores_exs m obl hob h48 ro hro s5D.locals hl2D
         (rd32le d 18) heightU (rd32_lt d 18) hhU hl8D hl9D
         (rd16le d 28) (rd16le_lt d 28) hl6D
         3 topD (by omega) htopd hl10D hl11D
@@ -586,7 +597,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
         have hcomp : rd32le d 30 = 0 := by omega
         simp [bmpGeometryCode, hgt', hh0, hPl, hcomp, hB8, hIntmin]
       exact ⟨ExS.seq hSet8 (ExS.seq hCmpSkip (ExS.seq hBitSkip (ExS.seq hSet10 hTail))), hbv.symm,
-        fun _ => hblk3⟩
+        fun _ => hblk3, fun _ j hj => hUnt j hj⟩
     · by_cases hB24 : rd16le d 28 = 24
       · -- bit = 24 → ch=3, ret 0
         have eB8 : EvE Gen.prog s5C
@@ -661,7 +672,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
         have hl6D : s5D.locals 6 = some (.int ⟨16, false⟩ (rd16le d 28)) := rfl
         have hl10D : s5D.locals 10 = some (.int ⟨8, false⟩ 3) := rfl
         have hl11D : s5D.locals 11 = some (.int ⟨8, false⟩ topD) := rfl
-        obtain ⟨s', hTail, hblk⟩ := bmp_stores_exs m obl hob h48 ro hro s5D.locals hl2D
+        obtain ⟨s', hTail, hblk, hUnt⟩ := bmp_stores_exs m obl hob h48 ro hro s5D.locals hl2D
           (rd32le d 18) heightU (rd32_lt d 18) hhU hl8D hl9D
           (rd16le d 28) (rd16le_lt d 28) hl6D
           3 topD (by omega) htopd hl10D hl11D
@@ -675,7 +686,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
           have hcomp : rd32le d 30 = 0 := by omega
           simp [bmpGeometryCode, hgt', hh0, hPl, hcomp, hB24, hIntmin]
         exact ⟨ExS.seq hSet8 (ExS.seq hCmpSkip (ExS.seq hBitSkip (ExS.seq hSet10 hTail))), hbv.symm,
-          fun _ => hblk3⟩
+          fun _ => hblk3, fun _ j hj => hUnt j hj⟩
       · by_cases hB32 : rd16le d 28 = 32
         · -- bit = 32 → ch=4, ret 0
           have eB8 : EvE Gen.prog s5C
@@ -758,7 +769,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
           have hl6D : s5D.locals 6 = some (.int ⟨16, false⟩ (rd16le d 28)) := rfl
           have hl10D : s5D.locals 10 = some (.int ⟨8, false⟩ 4) := rfl
           have hl11D : s5D.locals 11 = some (.int ⟨8, false⟩ topD) := rfl
-          obtain ⟨s', hTail, hblk⟩ := bmp_stores_exs m obl hob h48 ro hro s5D.locals hl2D
+          obtain ⟨s', hTail, hblk, hUnt⟩ := bmp_stores_exs m obl hob h48 ro hro s5D.locals hl2D
             (rd32le d 18) heightU (rd32_lt d 18) hhU hl8D hl9D
             (rd16le d 28) (rd16le_lt d 28) hl6D
             4 topD (by omega) htopd hl10D hl11D
@@ -772,7 +783,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
             have hcomp : rd32le d 30 = 0 := by omega
             simp [bmpGeometryCode, hgt', hh0, hPl, hcomp, hB32, hIntmin]
           exact ⟨ExS.seq hSet8 (ExS.seq hCmpSkip (ExS.seq hBitSkip (ExS.seq hSet10 hTail))), hbv.symm,
-            fun _ => hblk3⟩
+            fun _ => hblk3, fun _ j hj => hUnt j hj⟩
         · -- invalid bit → ret 6
           have hb8 : rd16le d 28 ≠ 8 ∧ rd16le d 28 ≠ 24 ∧ rd16le d 28 ≠ 32 :=
             ⟨hB8, hB24, hB32⟩
@@ -812,7 +823,7 @@ theorem tail_exs (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
             have hcomp : rd32le d 30 = 0 := by omega
             simp [bmpGeometryCode, hgt', hh0, hPl, hcomp, hb8.1, hb8.2.1, hb8.2.2, hIntmin]
           exact ⟨s5C, 6, ⟨ExS.seq hSet8 (ExS.seq hCmpSkip (ExS.seq_ret hBitRet6)), hbv.symm,
-            fun hb => absurd hb (by decide)⟩⟩
+            fun hb => absurd hb (by decide), fun hb _ _ => absurd hb (by decide)⟩⟩
 
 theorem wrap_i32_lt (z : Int) : IntTy.wrap ⟨32, true⟩ z < 4294967296 := by
   simp [IntTy.wrap, IntTy.modulus, IntTy.width]
