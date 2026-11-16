@@ -61,13 +61,28 @@ Key pieces added to get there:
   `bmpHeaderInfoOf_stage_facts` (17-way conjunction), `_px8`, `_pos8`,
   `_idx8` (factor monolithic derivations — the kernel chokes otherwise).
 
-## Next: Phase 3 — TGA
+## Phase 3 (TGA) — C/translation/spec/diff done, proofs remain
 
-See `~/.commandcode/plans/nanoimage-formal-remaining-phases.md`, Milestone 2:
-C refactor (core/shell split, error codes), translator + Gen regen, spec
-`NANO/Tga.lean` (sequential packet-stream `tgaPixels`), cdiff generator, then
-refinement proofs (header → write_pixel → RLE loops with the
-`pixel_index + count ≤ width*height` invariant). Commits C4/C5.
+- `src/nanoimage_tga_core.c` (core: `ni_tga_header`/`ni_tga_write_pixel`/
+  `ni_tga_decode_into`, `NI_TGA_ERR_*`) + `src/nanoimage_tga.c` shell;
+  `ni_tga_info` in `src/nanoimage_core.h`. `ni_size_mul(&local)` replaced by
+  `ni_bmp_mul_fits` + plain products (translator rejects `&local`); writes via
+  base+index subscripts (no pointer arithmetic); sample bytes are four scalar
+  locals (no local arrays).
+- **Translator trap**: expression-calls run with `ro = true` in MiniC — a
+  callee that stores is UB there. `if (!ni_tga_write_pixel(...))` was UB in
+  MiniC; bind the result to a local first (`wr = ...; if (!wr) ...`).
+- `Gen.lean` fids 21–23; `Nano/Tga.lean` spec (fuel-based packet-stream
+  `tgaWritesAux`, `List.set`-materialised writes); cdiff arms in
+  `cdiff_c.c`/`CDiff.lean`/`cdiff.py` (`tga_file` generator).
+- Gates: 4800 cases, 0 mismatches; `make test`, `make lean-check` green.
+
+Next (Phase 3 proofs): `ni_tga_header_exs` (staged like BMP's, simpler — no
+geometry stage), `ni_tga_write_pixel_exs` (per-pixel store, like
+`ni_bmp_decode_raw_pixel_exs`), then the loops (`tgaWritesAux`'s fuel =
+pixel count; the C's `loop0` = inner per-pixel for, `loop1` = outer packet
+while, with the `count ≤ pixels_left` invariant), then the composed load.
+Commits C5/C6 per the remaining-work plan.
 
 ## Key implementation notes (Phase 2 + composition work)
 

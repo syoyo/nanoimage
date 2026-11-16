@@ -33,6 +33,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 SRC_FILES = [
     "src/nanoimage_core.c",
     "src/nanoimage_bmp_core.c",
+    "src/nanoimage_tga_core.c",
 ]
 
 OUT = os.path.join(ROOT, "formal", "NANO", "C", "Gen.lean")
@@ -62,6 +63,9 @@ FUNCTIONS = [
     "ni_bmp_header_palette",
     "ni_bmp_decode_indexed_pixel",
     "ni_bmp_decode_raw_pixel",
+    "ni_tga_header",
+    "ni_tga_write_pixel",
+    "ni_tga_decode_into",
 ]
 
 # String literals live in one read-only block at this index.

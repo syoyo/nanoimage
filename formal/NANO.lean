@@ -26,6 +26,7 @@ import NANO.C.Proofs.NiBmpHeaderCompose
 import NANO.C.Proofs.NiBmpHeaderHeight
 import NANO.C.Proofs.NiBmpHeaderPalette
 import NANO.Bmp
+import NANO.Tga
 import NANO.C.Proofs.Bmp
 import NANO.C.Proofs.NiBmpHeaderSpecPalette
 import NANO.C.Proofs.NiBmpDecode

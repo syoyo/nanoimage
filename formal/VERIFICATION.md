@@ -61,7 +61,11 @@ No `native_decide`, no `bv_decide`.
 | 2 | Header-load helpers `readBytes_drop_ok`, `load_u32_field_of_geom`, `load_u16_field_of_geom`, `load_u8_field_of_geom`, `decodeLE_of_lt` (in `NiBmpHeaderLoads.lean`) | proven |
 | 2 | Header tail-arith helpers `trunc_check_skip`, `trunc_check_fire_condA/B`, `set_twelve_mul`, `set_twelve_mul2`, `set_eleven_rowstride`, `mulfits2_ite_skip`, `mulfits3_ite_skip`, `mulfits4_ite_skip`, `hMulFits2/3/4`, `fits{2,3,4}_proof`, `set_twelve_mul`, `set_eleven_rowstride`, `bin_u64_add_wrap`, `u16_u64_cast`, `bin_u64_sub`, `eval_row_stride` (in `NiBmpHeaderTail.lean`) | proven |
 
-| 3 | TGA | not started |
+| 3 | TGA core/shell split (`src/nanoimage_tga_core.c`: `ni_tga_header`, `ni_tga_write_pixel`, `ni_tga_decode_into` with `NI_TGA_ERR_*` codes; shell in `src/nanoimage_tga.c`) | done; `make test` green |
+| 3 | TGA translation (fids 21–23 in `Gen.lean`; the write call is a statement-call — expression-calls run under `ro=true` and may not write) | done; `c2lean --check` green |
+| 3 | TGA spec `NANO/Tga.lean` (`TgaInfo`, staged gates, sequential packet-stream `tgaPixels` with origin flip) | done |
+| 3 | TGA differential (C == MiniC == spec; RLE + raw, palettes rejected) | green — `make lean-diff` is now 4800 cases (600 TGA), 0 mismatches |
+| 3 | TGA refinement proofs (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop refinements, composed load) | not started |
 | 4 | GIF | not started |
 | 5 | PNG container (inflate is an oracle until phase 6) | not started |
 | 6 | Verified DEFLATE / zlib, default switch | not started |

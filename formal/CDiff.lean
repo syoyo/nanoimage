@@ -20,6 +20,7 @@
 -/
 import NANO.Basic
 import NANO.Bmp
+import NANO.Tga
 import NANO.C.Gen
 
 open NANO NANO.C
@@ -95,6 +96,11 @@ def scaleSpec (v bitDepth : Nat) : Option Nat :=
 
 
 def bmpFuel : Nat := 3000000
+
+def tgaFuel : Nat := 3000000
+
+/-- `ni_tga_info` block size (8+8+4+4+1+1+1+1, padded to 32). -/
+def tgaInfoSize : Nat := 32
 
 /-- Little-endian field of a block. -/
 def fieldAt (blk : List UInt8) (o n : Nat) : Nat := decodeLE ((blk.drop o).take n)
@@ -264,6 +270,55 @@ def runLine (line : String) : String :=
       | .ub => "UB"
       | .timeout => "TIMEOUT"
     let spec := match bmpDecode d with
+      | .ok px => s!"0 {toHex px}"
+      | .error e => toString e
+    s!"{c} | {spec}"
+  | ["tga_header", hex] =>
+    let d := parseHex hex
+    let mem0 : Mem := fun b => if b = 0 then some d else if b = 1 then some (List.replicate tgaInfoSize 0) else none
+    let r := callFunc Gen.prog tgaFuel Gen.fid_ni_tga_header
+      [.ptr 0 0, .int IntTy.u64 d.length, .ptr 1 0] mem0
+    let c := match r with
+      | .ok (some (.int _ code), m) =>
+        if code = 0 then
+          match m 1 with
+          | some blk => s!"0 {fieldAt blk 0 8} {fieldAt blk 8 8} {fieldAt blk 16 4} {fieldAt blk 20 4} {fieldAt blk 24 1} {fieldAt blk 25 1} {fieldAt blk 26 1} {fieldAt blk 27 1}"
+          | none => "ERR"
+        else toString code
+      | .ok _ => "ERR"
+      | .ub => "UB"
+      | .timeout => "TIMEOUT"
+    let spec := match tgaHeader d.length d with
+      | .ok h => s!"0 {h.outputSize} {h.dataOffset} {h.width} {h.height} {h.channels} {h.rle} {h.topOrigin} {h.rightOrigin}"
+      | .error e => toString e
+    s!"{c} | {spec}"
+  | ["tga_decode", hex] =>
+    let d := parseHex hex
+    let mem0 : Mem := fun b => if b = 0 then some d else if b = 1 then some (List.replicate tgaInfoSize 0) else none
+    let r0 := callFunc Gen.prog tgaFuel Gen.fid_ni_tga_header
+      [.ptr 0 0, .int IntTy.u64 d.length, .ptr 1 0] mem0
+    let c := match r0 with
+      | .ok (some (.int _ 0), m1) =>
+        match m1 1 with
+        | some info =>
+          let outSize := fieldAt info 0 8
+          let mem1 : Mem := fun b => if b = 2 then some (List.replicate outSize 0) else m1 b
+          match callFunc Gen.prog tgaFuel Gen.fid_ni_tga_decode_into
+              [.ptr 0 0, .int IntTy.u64 d.length, .ptr 1 0, .ptr 2 0, .int IntTy.u64 outSize] mem1 with
+          | .ok (some (.int _ 0), m2) =>
+            match m2 2 with
+            | some out => s!"0 {toHex (out.take outSize)}"
+            | none => "ERR"
+          | .ok (some (.int _ code), _) => toString code
+          | .ok _ => "ERR"
+          | .ub => "UB"
+          | .timeout => "TIMEOUT"
+        | none => "ERR"
+      | .ok (some (.int _ code), _) => toString code
+      | .ok _ => "ERR"
+      | .ub => "UB"
+      | .timeout => "TIMEOUT"
+    let spec := match tgaDecode d with
       | .ok px => s!"0 {toHex px}"
       | .error e => toString e
     s!"{c} | {spec}"

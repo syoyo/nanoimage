@@ -66,6 +66,39 @@ int ni_bmp_header(const uint8_t *bytes, size_t size, ni_bmp_info *info);
 int ni_bmp_decode_into(const uint8_t *bytes, size_t size,
                        const ni_bmp_info *info, uint8_t *out, size_t out_cap);
 
+/* TGA verified core (src/nanoimage_tga_core.c). The struct has no padding;
+ * offsets are probed by the Lean translator (formal/tools/c2lean.py). */
+typedef struct ni_tga_info {
+  size_t output_size;
+  size_t data_offset;
+  uint32_t width;
+  uint32_t height;
+  uint8_t channels;
+  uint8_t rle;
+  uint8_t top_origin;
+  uint8_t right_origin;
+} ni_tga_info;
+
+#define NI_TGA_OK 0
+#define NI_TGA_ERR_TRUNCATED_HEADER 1
+#define NI_TGA_ERR_DIMENSIONS 2
+#define NI_TGA_ERR_COLOR_MAP 3
+#define NI_TGA_ERR_IMAGE_TYPE 4
+#define NI_TGA_ERR_DEPTH 5
+#define NI_TGA_ERR_ID_TRUNCATED 6
+#define NI_TGA_ERR_OUTPUT_OVERFLOW 7
+#define NI_TGA_ERR_TRUNCATED_RLE 8
+#define NI_TGA_ERR_PACKET_LENGTH 9
+#define NI_TGA_ERR_TRUNCATED_PIXEL 10
+#define NI_TGA_ERR_TRUNCATED_RAW 11
+#define NI_TGA_ERR_CHANNELS 12
+
+int ni_tga_header(const uint8_t *bytes, size_t size, ni_tga_info *info);
+int ni_tga_write_pixel(uint8_t *out, size_t base, uint8_t channels, uint8_t s0,
+                       uint8_t s1, uint8_t s2, uint8_t s3);
+int ni_tga_decode_into(const uint8_t *bytes, size_t size,
+                       const ni_tga_info *info, uint8_t *out, size_t out_cap);
+
 #ifdef __cplusplus
 }
 #endif

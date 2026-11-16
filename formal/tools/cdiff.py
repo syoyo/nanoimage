@@ -80,6 +80,65 @@ def bmp_cases(rng, n):
     return out
 
 
+def tga_file(rng):
+    """A TGA file, mostly well formed, with header and payload mutations."""
+    w = rng.choice([1, 2, 3, 4, 5, 7, 8, rng.randint(1, 12)])
+    h = rng.choice([1, 2, 3, 4, 6, rng.randint(1, 10)])
+    image_type = rng.choice([2, 2, 3, 10, 10, 11, rng.choice([0, 1, 4, 32])])
+    depth = rng.choice([24, 24, 32, 32, 8, 8, rng.choice([15, 16, 1])])
+    descriptor = rng.choice([0, 0x20, 0x10, 0x30, rng.randint(0, 255)])
+    id_len = rng.choice([0, 0, rng.randint(0, 5), rng.randint(0, 40)])
+    cmap = 0 if rng.random() < 0.9 else rng.choice([1, 2])
+    hdr = (bytes([id_len, cmap, image_type])
+           + bytes(rng.randint(0, 255) for _ in range(9))
+           + struct.pack("<HH", w, h) + bytes([depth, descriptor]))
+    idb = bytes(rng.randint(0, 255) for _ in range(id_len))
+    if (image_type in (3, 11)) and depth == 8:
+        ch = 1
+    elif depth == 24:
+        ch = 3
+    elif depth == 32:
+        ch = 4
+    else:
+        ch = 1
+    n = w * h
+    rle = image_type in (10, 11)
+    body = b""
+    if rle:
+        left = n
+        while left > 0:
+            run = rng.random() < 0.5
+            cnt = rng.randint(1, min(128, left))
+            if rng.random() < 0.08:
+                cnt = min(128, left + rng.choice([1, 2]))  # overrun mutation
+            hb = (cnt - 1) | (0x80 if run else 0)
+            body += bytes([hb])
+            if run:
+                body += bytes(rng.randint(0, 255) for _ in range(ch))
+            else:
+                body += bytes(rng.randint(0, 255) for _ in range(cnt * ch))
+            left -= min(cnt, left)
+    else:
+        body = bytes(rng.randint(0, 255) for _ in range(n * ch))
+    data = hdr + idb + body
+    if rng.random() < 0.15 and len(data) > 0:
+        data = data[: rng.randint(0, len(data))]
+    if rng.random() < 0.15 and len(data) > 0:
+        data = bytearray(data)
+        data[rng.randrange(len(data))] ^= 1 << rng.randrange(8)
+        data = bytes(data)
+    return data
+
+
+def tga_cases(rng, n):
+    out = []
+    for _ in range(n):
+        d = tga_file(rng).hex()
+        out.append("tga_header " + d)
+        out.append("tga_decode " + d)
+    return out
+
+
 def cases(rng, n):
     out = []
     # Big-endian readers: exact reads + trailing bytes.
@@ -121,7 +180,7 @@ def main():
     if "--seed" in args:
         seed = int(args[args.index("--seed") + 1])
     rng = random.Random(seed)
-    lines = cases(rng, n) + bmp_cases(rng, n)
+    lines = cases(rng, n) + bmp_cases(rng, n) + tga_cases(rng, n)
     inp = "\n".join(lines) + "\n"
     with tempfile.TemporaryDirectory() as d:
         exe = os.path.join(d, "cdiff_c")

@@ -3,6 +3,7 @@
  * Build with ASan/UBSan (formal/tools/cdiff.py does). */
 #include "../../src/nanoimage_core.c"
 #include "../../src/nanoimage_bmp_core.c"
+#include "../../src/nanoimage_tga_core.c"
 #include <stdlib.h>
 
 #include <stdio.h>
@@ -135,6 +136,47 @@ int main(void) {
                 uint8_t *out = (uint8_t *)malloc(info.output_size ? info.output_size : 1);
                 code = ni_bmp_decode_into(d, len, &info, out, info.output_size);
                 if (code == NI_BMP_OK) {
+                    size_t i;
+                    printf("0 ");
+                    for (i = 0; i < info.output_size; i++) printf("%02x", (unsigned)out[i]);
+                    printf("\n");
+                } else {
+                    printf("%d\n", code);
+                }
+                free(out);
+            } else {
+                printf("%d\n", code);
+            }
+            free(d);
+        } else if (strcmp(kind, "tga_header") == 0) {
+            size_t len = strlen(rest) / 2;
+            uint8_t *d = (uint8_t *)malloc(len ? len : 1);
+            ni_tga_info info;
+            int code;
+            memset(&info, 0, sizeof(info));
+            parsehex(rest, len, d);
+            code = ni_tga_header(d, len, &info);
+            if (code == NI_TGA_OK) {
+                printf("0 %zu %zu %u %u %u %u %u %u\n", info.output_size, info.data_offset,
+                       (unsigned)info.width, (unsigned)info.height,
+                       (unsigned)info.channels, (unsigned)info.rle,
+                       (unsigned)info.top_origin, (unsigned)info.right_origin);
+            } else {
+                printf("%d\n", code);
+            }
+            free(d);
+        } else if (strcmp(kind, "tga_decode") == 0) {
+            size_t len = strlen(rest) / 2;
+            uint8_t *d = (uint8_t *)malloc(len ? len : 1);
+            ni_tga_info info;
+            int code;
+            memset(&info, 0, sizeof(info));
+            parsehex(rest, len, d);
+            code = ni_tga_header(d, len, &info);
+            if (code == NI_TGA_OK) {
+                uint8_t *out = (uint8_t *)malloc(info.output_size ? info.output_size : 1);
+                code = ni_tga_decode_into(d, len, &info, out, info.output_size);
+                if (code == NI_TGA_OK) {
                     size_t i;
                     printf("0 ");
                     for (i = 0; i < info.output_size; i++) printf("%02x", (unsigned)out[i]);
