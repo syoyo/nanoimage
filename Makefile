@@ -6,7 +6,7 @@ CPPFLAGS ?= -Iinclude
 SIMD ?= 0
 CUSTOM_PNG_CODEC ?= 0
 
-SRC = src/nanoimage_alloc.c src/nanoimage_write.c src/nanoimage_simd.c src/nanoimage_zlib.c src/nanoimage_png.c src/nanoimage_png_write.c src/nanoimage_jpeg.c src/nanoimage_jpeg_write.c src/nanoimage_bmp.c src/nanoimage_bmp_write.c src/nanoimage_tga.c src/nanoimage_tga_write.c src/nanoimage_gif.c src/nanoimage_gif_write.c
+SRC = src/nanoimage_core.c src/nanoimage_bmp_core.c src/nanoimage_alloc.c src/nanoimage_write.c src/nanoimage_simd.c src/nanoimage_zlib.c src/nanoimage_png.c src/nanoimage_png_write.c src/nanoimage_jpeg.c src/nanoimage_jpeg_write.c src/nanoimage_bmp.c src/nanoimage_bmp_write.c src/nanoimage_tga.c src/nanoimage_tga_write.c src/nanoimage_gif.c src/nanoimage_gif_write.c
 SIMD_SRC = src/nanoimage_simd_sse2.c src/nanoimage_simd_sse41.c src/nanoimage_simd_avx.c src/nanoimage_simd_avx2.c
 CUSTOM_CODEC_SRC = src/nanoimage_fpnge_bridge.cc src/nanoimage_fpng_bridge.cc
 TEST_SRC = tests/test_nanoimage.c
@@ -32,7 +32,7 @@ endif
 
 PNGSUITE_DIR ?= /home/syoyo/work/stb/tests/pngsuite
 
-.PHONY: all test benchmark pngsuite clean
+.PHONY: all test benchmark pngsuite clean lean-check lean-diff
 
 all: test
 
@@ -68,6 +68,14 @@ src/nanoimage_simd_avx.o: src/nanoimage_simd_avx.c
 
 src/nanoimage_simd_avx2.o: src/nanoimage_simd_avx2.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -mavx2 -c $< -o $@
+
+# Lean verification of the loader core (see formal/README.md).
+lean-check:
+	cd formal && lake build
+	python3 formal/tools/c2lean.py --check
+
+lean-diff:
+	python3 formal/tools/cdiff.py --n 300
 
 # Run pngsuite sweep:
 #   PASS  - valid file decoded successfully

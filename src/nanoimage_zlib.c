@@ -1,4 +1,5 @@
 #include "nanoimage_zlib.h"
+#include "nanoimage_core.h"
 #include "nanoimage_zlib_internal.h"
 
 #include <limits.h>
@@ -17,14 +18,6 @@ static void ni_set_error(char *err, size_t cap, const char *fmt, ...) {
   va_start(args, fmt);
   (void)vsnprintf(err, cap, fmt, args);
   va_end(args);
-}
-
-static int ni_size_add(size_t a, size_t b, size_t *out) {
-  if (a > (SIZE_MAX - b)) {
-    return 0;
-  }
-  *out = a + b;
-  return 1;
 }
 
 static int ni_zlib_inflate_impl(const uint8_t *input, size_t input_len,

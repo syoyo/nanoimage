@@ -16,6 +16,8 @@ local core_sources = {
     "src/nanoimage_alloc.c",
     "src/nanoimage_write.c",
     "src/nanoimage_simd.c",
+    "src/nanoimage_core.c",
+    "src/nanoimage_bmp_core.c",
     "src/nanoimage_zlib.c",
     "src/nanoimage_png.c",
     "src/nanoimage_png_write.c",

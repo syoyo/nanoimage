@@ -1,4 +1,5 @@
 #include "nanoimage_tga.h"
+#include "nanoimage_core.h"
 
 #include "nanoimage_alloc_internal.h"
 
@@ -16,18 +17,6 @@ static void ni_set_error(char *err, size_t cap, const char *fmt, ...) {
   va_start(args, fmt);
   (void)vsnprintf(err, cap, fmt, args);
   va_end(args);
-}
-
-static uint16_t ni_read_u16le(const uint8_t *p) {
-  return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8u));
-}
-
-static int ni_size_mul(size_t a, size_t b, size_t *out) {
-  if ((a != 0u) && (b > (SIZE_MAX / a))) {
-    return 0;
-  }
-  *out = a * b;
-  return 1;
 }
 
 static int ni_tga_write_pixel(uint8_t *dst, uint8_t channels,

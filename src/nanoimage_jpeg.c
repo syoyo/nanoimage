@@ -1,4 +1,5 @@
 #include "nanoimage_jpeg.h"
+#include "nanoimage_core.h"
 
 #include "nanoimage_alloc_internal.h"
 #include <math.h>
@@ -43,10 +44,6 @@ static void ni_set_error(char *err, size_t cap, const char *fmt, ...) {
   va_start(args, fmt);
   (void)vsnprintf(err, cap, fmt, args);
   va_end(args);
-}
-
-static uint16_t ni_read_u16be(const uint8_t *p) {
-  return (uint16_t)(((uint16_t)p[0] << 8u) | p[1]);
 }
 
 static int ni_build_huffman(ni_huff_table *tbl) {
@@ -214,16 +211,6 @@ static void ni_idct_block(const int16_t in[64], uint8_t out[64]) {
     }
 
   }
-}
-
-static uint8_t ni_clamp_u8(int v) {
-  if (v < 0) {
-    return 0u;
-  }
-  if (v > 255) {
-    return 255u;
-  }
-  return (uint8_t)v;
 }
 
 int ni_load_jpeg_from_memory(const uint8_t *bytes, size_t size, ni_image *out,

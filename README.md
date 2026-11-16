@@ -61,6 +61,12 @@ before emitting output. PNG, GIF, JPEG, BMP, and TGA all stream rows or blocks
 incrementally so applications can avoid building a second full output buffer when
 using the callback-based API.
 
+## Formal verification
+
+The loading path is being verified in Lean 4 under `formal/`. See
+[formal/README.md](formal/README.md) and [formal/VERIFICATION.md](formal/VERIFICATION.md)
+for scope and status. Run `make lean-check` and `make lean-diff`.
+
 ## Build and test
 
 ```bash

@@ -2,3 +2,8 @@
 /.xmake
 /build
 *.o
+formal/.lake/
+formal/build/
+
+__pycache__/
+*.pyc

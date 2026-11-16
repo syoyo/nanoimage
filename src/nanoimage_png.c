@@ -1,4 +1,5 @@
 #include "nanoimage_png.h"
+#include "nanoimage_core.h"
 
 #include "nanoimage_alloc_internal.h"
 #include "nanoimage_png_custom_internal.h"
@@ -28,11 +29,6 @@ static void ni_set_error(char *err, size_t cap, const char *fmt, ...) {
   va_end(args);
 }
 
-static uint32_t ni_read_u32be(const uint8_t *p) {
-  return ((uint32_t)p[0] << 24u) | ((uint32_t)p[1] << 16u) |
-         ((uint32_t)p[2] << 8u) | (uint32_t)p[3];
-}
-
 static uint32_t ni_crc32(const uint8_t *data, size_t n) {
   uint32_t crc = 0xffffffffu;
   size_t i;
@@ -45,55 +41,6 @@ static uint32_t ni_crc32(const uint8_t *data, size_t n) {
     }
   }
   return crc ^ 0xffffffffu;
-}
-
-static int ni_size_mul(size_t a, size_t b, size_t *out) {
-  if ((a != 0u) && (b > (SIZE_MAX / a))) {
-    return 0;
-  }
-  *out = a * b;
-  return 1;
-}
-
-static int ni_size_add(size_t a, size_t b, size_t *out) {
-  if (a > (SIZE_MAX - b)) {
-    return 0;
-  }
-  *out = a + b;
-  return 1;
-}
-
-static int ni_scale_to_8bit(uint32_t v, uint8_t bit_depth, uint8_t *out) {
-  uint32_t maxv;
-  if ((bit_depth == 0u) || (bit_depth > 8u) || (out == NULL)) {
-    return 0;
-  }
-  maxv = (1u << bit_depth) - 1u;
-  *out = (uint8_t)((v * 255u + (maxv / 2u)) / maxv);
-  return 1;
-}
-
-static uint32_t ni_read_packed_bits(const uint8_t *row, size_t pixel_index,
-                                    uint8_t bit_depth) {
-  const size_t bit_index = pixel_index * (size_t)bit_depth;
-  const size_t byte_index = bit_index >> 3u;
-  const uint8_t shift = (uint8_t)(8u - bit_depth - (bit_index & 7u));
-  const uint8_t mask = (uint8_t)((1u << bit_depth) - 1u);
-  return (uint32_t)((row[byte_index] >> shift) & mask);
-}
-
-static uint8_t ni_paeth(uint8_t a, uint8_t b, uint8_t c) {
-  const int p = (int)a + (int)b - (int)c;
-  const int pa = (p > (int)a) ? (p - (int)a) : ((int)a - p);
-  const int pb = (p > (int)b) ? (p - (int)b) : ((int)b - p);
-  const int pc = (p > (int)c) ? (p - (int)c) : ((int)c - p);
-  if ((pa <= pb) && (pa <= pc)) {
-    return a;
-  }
-  if (pb <= pc) {
-    return b;
-  }
-  return c;
 }
 
 static int ni_unfilter_row(uint8_t *row, const uint8_t *prev, size_t rowbytes,
