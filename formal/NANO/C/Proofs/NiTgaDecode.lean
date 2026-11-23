@@ -467,7 +467,8 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
     ∃ s', ExS Gen.prog s tgaPixelBody .normal s' ∧
       s'.locals 6 = some (.int u64 (p + 1)) ∧
       s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length)) ∧
-      s'.mem 3 = some info := by
+      s'.mem 3 = some info ∧
+      (∀ j, j ≠ 6 → j ≠ 17 → j ≠ 18 → j ≠ 19 → j ≠ 20 → j ≠ 26 → j ≠ 21 → j ≠ 22 → j ≠ 23 → j ≠ 24 → j ≠ 25 → s'.locals j = s.locals j) := by
   let s1 : State := { s with locals := s.locals.upd 17 (.int u8 b0) }
   let s2 : State := { s1 with locals := s1.locals.upd 18 (.int u8 b1) }
   let s3 : State := { s2 with locals := s2.locals.upd 19 (.int u8 b2) }
@@ -543,7 +544,7 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
     EvE.cast (EvE.bin e6 e1 (bin_u64_add p 1 hp1)) (u64_u64_cast (p + 1) hp1)
   let s7 : State := { s6 with locals := s6.locals.upd 6 (.int u64 (p + 1)) }
   have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
-  refine ⟨s7, ?_, ?_, ?_, ?_⟩
+  refine ⟨s7, ?_, ?_, ?_, ?_, ?_⟩
   · -- compose
     exact ExS.seq e17 (ExS.seq e18 (ExS.seq e19 (ExS.seq e20 (ExS.seq hskip (ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)))))))
   · show s7.locals 6 = some (.int u64 (p + 1))
@@ -556,6 +557,12 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
     show (s5.mem.upd ob _) 3 = some info
     rw [show (s5.mem.upd ob _) 3 = s5.mem 3 from by rw [Mem.upd_ne (h := by omega)]]
     rw [hm5]; exact hinfo
+  · intro j h6 h17 h18 h19 h20 h26 h21 h22 h23 h24 h25
+    show s7.locals j = s.locals j
+    rw [show s7.locals j = s6.locals j from by simp [s7, Locals.upd_ne, h6]]
+    rw [show s6.locals j = s5.locals j from by show (s5.locals.upd 26 (.int i32 1)) j = s5.locals j; simp [Locals.upd_ne, h26]]
+    rw [hgen j h21 h22 h23 h24 h25]
+    simp [s4, s3, s2, s1, Locals.upd_ne, h17, h18, h19, h20]
 
 end NANO.C.Proofs
 
