@@ -179,7 +179,8 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
       s'.locals 3 = s.locals 3 ∧ s'.locals 8 = s.locals 8 ∧
       s'.locals 17 = s.locals 17 ∧ s'.locals 18 = s.locals 18 ∧
       s'.locals 19 = s.locals 19 ∧ s'.locals 20 = s.locals 20 ∧
-      s'.mem = s.mem := by
+      s'.locals 6 = s.locals 6 ∧ s'.locals 7 = s.locals 7 ∧
+      s'.mem = s.mem ∧ s'.ro = s.ro := by
   have hpl : p % h.width < h.width := Nat.mod_lt _ hwpos
   have hqp : p / h.width ≤ p := Nat.div_le_self _ _
   have hpwh : p / h.width < h.height := Nat.div_lt_of_lt_mul hpp
@@ -260,7 +261,7 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
       (EvE.cast (EvE.var h8s) (u8_u64_cast h.channels hch))
       (bin_u64_mul (tgaDstY h p * h.width + tgaDstX h p) h.channels hidx)
   refine ⟨s5, ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.set h25)))),
-    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals first
     | rfl
     | simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
@@ -433,5 +434,124 @@ abbrev tgaPixelBody : Stmt :=
   (.seq tgaDstCompute
   (.seq tgaCall
   (.seq tgaWrCheck tgaPixelInc)))))))
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl : List UInt8)
+    (hmob : s.mem ob = some obl) (hlob : obl.length < 2 ^ 64) (hro : s.ro = false) (hob3 : ob ≠ 3)
+    (info : List UInt8) (hinfo : s.mem 3 = some info) (h32 : info.length = 32)
+    (l2 : s.locals 2 = some (.ptr 3 0)) (l3 : s.locals 3 = some (.ptr ob 0))
+    (l6 : s.locals 6 = some (.int u64 p)) (l8 : s.locals 8 = some (.int u8 h.channels))
+    (b0 b1 b2 b3 : Nat) (l12 : s.locals 12 = some (.int u8 b0)) (l13 : s.locals 13 = some (.int u8 b1))
+    (l14 : s.locals 14 = some (.int u8 b2)) (l15 : s.locals 15 = some (.int u8 b3))
+    (rle hdr : Nat) (l9 : s.locals 9 = some (.int u8 rle)) (l11 : s.locals 11 = some (.int u8 hdr))
+    (hraw : rle = 0 ∨ (hdr &&& 128) ≠ 0) (hrle8 : rle < 256) (hhdr8 : hdr < 256)
+    (hl16 : load s.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load s.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load s.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load s.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hpw : p / h.width < 2 ^ 32) (hch : h.channels < 256) (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hp : p < 2 ^ 64) (hpp : p < h.width * h.height) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hmul : tgaDstY h p * h.width < 2 ^ 64) (hadd : tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64)
+    (hidx : (tgaDstY h p * h.width + tgaDstX h p) * h.channels < 2 ^ 64)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
+    (hb0 : b0 < 256) (hb1 : b1 < 256) (hb2 : b2 < 256) (hb3 : b3 < 256)
+    (hwb : tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length ≤ obl.length) :
+    ∃ s', ExS Gen.prog s tgaPixelBody .normal s' ∧
+      s'.locals 6 = some (.int u64 (p + 1)) ∧
+      s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length)) ∧
+      s'.mem 3 = some info := by
+  let s1 : State := { s with locals := s.locals.upd 17 (.int u8 b0) }
+  let s2 : State := { s1 with locals := s1.locals.upd 18 (.int u8 b1) }
+  let s3 : State := { s2 with locals := s2.locals.upd 19 (.int u8 b2) }
+  let s4 : State := { s3 with locals := s3.locals.upd 20 (.int u8 b3) }
+  have e17 : ExS Gen.prog s (.set 17 (.var 12)) .normal s1 := ExS.set (EvE.var l12)
+  have l13_1 : s1.locals 13 = some (.int u8 b1) := by simp [s1, Locals.upd_ne, l13]
+  have e18 : ExS Gen.prog s1 (.set 18 (.var 13)) .normal s2 := ExS.set (EvE.var l13_1)
+  have l14_2 : s2.locals 14 = some (.int u8 b2) := by simp [s2, s1, Locals.upd_ne, l14]
+  have e19 : ExS Gen.prog s2 (.set 19 (.var 14)) .normal s3 := ExS.set (EvE.var l14_2)
+  have l15_3 : s3.locals 15 = some (.int u8 b3) := by simp [s3, s2, s1, Locals.upd_ne, l15]
+  have e20 : ExS Gen.prog s3 (.set 20 (.var 15)) .normal s4 := ExS.set (EvE.var l15_3)
+  have l9_4 : s4.locals 9 = some (.int u8 rle) := by simp [s4, s3, s2, s1, Locals.upd_ne, l9]
+  have l11_4 : s4.locals 11 = some (.int u8 hdr) := by simp [s4, s3, s2, s1, Locals.upd_ne, l11]
+  have evA : EvE Gen.prog s4 (.bin .ne (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (boolVal (decide (rle ≠ 0))) :=
+    EvE.bin (EvE.cast (EvE.var l9_4) (u8_u32_cast rle hrle8)) (EvE.const (v := .int u32 0)) (bin_u32_ne rle 0)
+  have evB : EvE Gen.prog s4 (.bin .eq (some u32) (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 128))) (.const (.int u32 0))) (boolVal (decide ((hdr &&& 128) = 0))) :=
+    EvE.bin (EvE.bin (EvE.cast (EvE.var l11_4) (u8_u32_cast hdr hhdr8)) (EvE.const (v := .int u32 128)) (bin_u32_band hdr 128))
+      (EvE.const (v := .int u32 0)) (bin_u32_eq (hdr &&& 128) 0)
+  have hcond4 : EvE Gen.prog s4 tgaRawCond (boolVal false) := by
+    have htT : truthy (boolVal (decide (rle ≠ 0))) = .ok (decide (rle ≠ 0)) := truthy_boolVal _
+    rcases hraw with hr0 | hbn
+    · have haf : truthy (boolVal (decide (rle ≠ 0))) = .ok false := by
+        rw [truthy_boolVal, show decide (rle ≠ 0) = false from decide_eq_false (by omega)]
+      exact EvE.land_false evA haf
+    · have hb : truthy (boolVal (decide ((hdr &&& 128) = 0))) = .ok false := by
+        rw [truthy_boolVal, decide_eq_false hbn]
+      by_cases hrle : rle ≠ 0
+      · have ht : truthy (boolVal (decide (rle ≠ 0))) = .ok true := by
+          rw [truthy_boolVal, decide_eq_true hrle]
+        exact EvE.land_true evA ht evB hb
+      · have haf : truthy (boolVal (decide (rle ≠ 0))) = .ok false := by
+          rw [truthy_boolVal, decide_eq_false hrle]
+        exact EvE.land_false evA haf
+  have hskip : ExS Gen.prog s4 (.ite tgaRawCond tgaRawRead .skip) .normal s4 :=
+    ExS.ite hcond4 (truthy_boolVal false) ExS.skip
+  have l2_4 : s4.locals 2 = some (.ptr 3 0) := by simp [s4, s3, s2, s1, Locals.upd_ne, l2]
+  have l6_4 : s4.locals 6 = some (.int u64 p) := by simp [s4, s3, s2, s1, Locals.upd_ne, l6]
+  have l8_4 : s4.locals 8 = some (.int u8 h.channels) := by simp [s4, s3, s2, s1, Locals.upd_ne, l8]
+  have l3_4 : s4.locals 3 = some (.ptr ob 0) := by simp [s4, s3, s2, s1, Locals.upd_ne, l3]
+  have l17_4 : s4.locals 17 = some (.int u8 b0) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
+  have l18_4 : s4.locals 18 = some (.int u8 b1) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
+  have l19_4 : s4.locals 19 = some (.int u8 b2) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
+  have l20_4 : s4.locals 20 = some (.int u8 b3) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
+  have m4 : s4.mem = s.mem := rfl
+  obtain ⟨s5, hdst, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
+    ni_tga_dst_compute s4 h p info (by rw [m4]; exact hinfo) h32 l2_4 l6_4 l8_4
+      (by rw [m4]; exact hl16) (by rw [m4]; exact hl20) (by rw [m4]; exact hl26) (by rw [m4]; exact hl27)
+      hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
+  have l3_5 : s5.locals 3 = some (.ptr ob 0) := by rw [h3d]; exact l3_4
+  have l8_5 : s5.locals 8 = some (.int u8 h.channels) := by rw [h8d]; exact l8_4
+  have l17_5 : s5.locals 17 = some (.int u8 b0) := by rw [h17d]; exact l17_4
+  have l18_5 : s5.locals 18 = some (.int u8 b1) := by rw [h18d]; exact l18_4
+  have l19_5 : s5.locals 19 = some (.int u8 b2) := by rw [h19d]; exact l19_4
+  have l20_5 : s5.locals 20 = some (.int u8 b3) := by rw [h20d]; exact l20_4
+  have hmob5 : s5.mem ob = some obl := by rw [hm5]; exact hmob
+  have hro5' : s5.ro = false := by rw [hro5]; exact hro
+  have hcall : ExS Gen.prog s5 tgaCall .normal
+      ⟨s5.locals.upd 26 (.int i32 1), s5.mem.upd ob (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length)), s5.ro⟩ :=
+    ni_tga_write_pixel_stmt_exs s5 ob obl hmob5 (tgaDstIndex h p) (by rw [tgaDstIndex_eq]; exact hidx) hlob
+      h.channels b0 b1 b2 b3 hc hb0 hb1 hb2 hb3 hwb hro5' l3_5 h25 l8_5 l17_5 l18_5 l19_5 l20_5
+  let s6 : State := ⟨s5.locals.upd 26 (.int i32 1), s5.mem.upd ob (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length)), s5.ro⟩
+  have hwr : ExS Gen.prog s6 tgaWrCheck .normal s6 := ni_tga_decode_wr_check s6 rfl
+  -- pixel++
+  have l6_6 : s6.locals 6 = some (.int u64 p) := by
+    show (s5.locals.upd 26 (.int i32 1)) 6 = some (.int u64 p)
+    rw [show (s5.locals.upd 26 (.int i32 1)) 6 = s5.locals 6 from by simp [Locals.upd_ne]]
+    rw [h6d]; exact l6_4
+  have hp1 : p + 1 < 2 ^ 64 := by omega
+  have e6 : EvE Gen.prog s6 (.cast u64 (.var 6)) (.int u64 p) := EvE.cast (EvE.var l6_6) (u64_u64_cast p hp)
+  have e1 : EvE Gen.prog s6 (.cast u64 (.cast u64 (.const (.int u32 1)))) (.int u64 1) :=
+    EvE.cast (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (u64_u64_cast 1 (by omega))
+  have einc : EvE Gen.prog s6 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 6)) (.cast u64 (.cast u64 (.const (.int u32 1)))))) (.int u64 (p + 1)) :=
+    EvE.cast (EvE.bin e6 e1 (bin_u64_add p 1 hp1)) (u64_u64_cast (p + 1) hp1)
+  let s7 : State := { s6 with locals := s6.locals.upd 6 (.int u64 (p + 1)) }
+  have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
+  refine ⟨s7, ?_, ?_, ?_, ?_⟩
+  · -- compose
+    exact ExS.seq e17 (ExS.seq e18 (ExS.seq e19 (ExS.seq e20 (ExS.seq hskip (ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)))))))
+  · show s7.locals 6 = some (.int u64 (p + 1))
+    simp [s7, Locals.upd_same]
+  · show s7.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length))
+    show (s6.mem) ob = _
+    show (s5.mem.upd ob _) ob = _
+    rw [Mem.upd_same]
+  · show s7.mem 3 = some info
+    show (s5.mem.upd ob _) 3 = some info
+    rw [show (s5.mem.upd ob _) 3 = s5.mem 3 from by rw [Mem.upd_ne (h := by omega)]]
+    rw [hm5]; exact hinfo
 
 end NANO.C.Proofs
