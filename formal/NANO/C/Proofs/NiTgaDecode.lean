@@ -785,3 +785,31 @@ theorem ni_tga_pixel_step_raw (s : State) (h : TgaInfo) (p : Nat) (ob bd : Nat) 
     simp [sR, s4, s3, s2, s1, Locals.upd_ne, hj7, hj17, hj18, hj19, hj20]
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+abbrev tgaStep16 : Stmt :=
+  .set 16 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.cast u64 (.cast u64 (.const (.int u32 1))))))
+
+/-- The decode inner loop (`ni_tga_decode_into_loop0`). -/
+abbrev tgaLoop0 : Stmt :=
+  .loop (.ite (.bin .lt (some u64) (.var 16) (.var 10)) tgaPixelBody .brk) tgaStep16
+
+/-- loop0 invariant: counter `i`, pixel index `p0+i`, buffer = `i` folded writes,
+    info block and the loop's entry locals intact, `i ≤ count`. -/
+def TgaLoopInv (s : State) (h : TgaInfo) (p0 count ob : Nat) (obl info : List UInt8)
+    (b0 b1 b2 b3 rle hdr off i : Nat) : Prop :=
+  s.locals 16 = some (.int u64 i) ∧
+  s.locals 6 = some (.int u64 (p0 + i)) ∧
+  s.mem ob = some (tgaFoldI obl h p0 (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)) i) ∧
+  s.mem 3 = some info ∧
+  s.locals 2 = some (.ptr 3 0) ∧ s.locals 3 = some (.ptr ob 0) ∧
+  s.locals 7 = some (.int u64 off) ∧ s.locals 8 = some (.int u8 h.channels) ∧
+  s.locals 9 = some (.int u8 rle) ∧ s.locals 10 = some (.int u64 count) ∧
+  s.locals 11 = some (.int u8 hdr) ∧
+  s.locals 12 = some (.int u8 b0) ∧ s.locals 13 = some (.int u8 b1) ∧
+  s.locals 14 = some (.int u8 b2) ∧ s.locals 15 = some (.int u8 b3) ∧
+  s.ro = false ∧ i ≤ count
+
+end NANO.C.Proofs
