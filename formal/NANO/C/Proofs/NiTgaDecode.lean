@@ -264,3 +264,16 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
   · rfl
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- The decode's `if (!write_ok) return 12` check: with `wr = 1` it falls through. -/
+theorem ni_tga_decode_wr_check (s : State) (l26 : s.locals 26 = some (.int i32 1)) :
+    ExS Gen.prog s
+      (.ite (.un .lnot i32 (.var 26)) (.ret (some (.const (.int i32 12)))) .skip) .normal s := by
+  have hev : EvE Gen.prog s (.un .lnot i32 (.var 26)) (boolVal false) :=
+    EvE.un (EvE.var l26) (by simp [evalUn, truthy, boolVal])
+  exact ExS.ite hev (truthy_boolVal false) ExS.skip
+
+end NANO.C.Proofs
