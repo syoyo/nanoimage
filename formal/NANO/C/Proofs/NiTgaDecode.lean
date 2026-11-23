@@ -1071,3 +1071,70 @@ theorem ni_tga_loop0_step_raw (st : State) (h : TgaInfo) (p0 count ob bd : Nat) 
   · show i + 1 ≤ count; omega
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem ni_tga_loop0_raw (st0 : State) (h : TgaInfo) (p0 count ob bd : Nat) (obl info dat : List UInt8)
+    (b0 b1 b2 b3 rle hdr off0 i0 : Nat)
+    (hinv0 : TgaLoopInvRaw st0 h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 i0)
+    (h32 : info.length = 32) (hcount64 : count < 2 ^ 64)
+    (hrawR : rle ≠ 0) (hrawB : (hdr &&& 128) = 0) (hrle8 : rle < 256) (hhdr8 : hdr < 256)
+    (hbd3 : bd ≠ 3) (hbdo : bd ≠ ob) (hdat64 : dat.length < 2 ^ 64)
+    (hl16_0 : load st0.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20_0 : load st0.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26_0 : load st0.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27_0 : load st0.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hch : h.channels < 256) (hchp : 0 < h.channels) (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hwh64 : h.width * h.height < 2 ^ 64)
+    (hbnd : ∀ p, p < p0 + count → TgaPixelBounds h p)
+    (hdbnd : ∀ i, i < count → (off0 + i * h.channels) + h.channels ≤ dat.length)
+    (hdob : ∀ i, i < count → (off0 + i * h.channels) + h.channels < 2 ^ 64)
+    (hwbf : ∀ i, i < count → tgaDstIndex h (p0 + i) + (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + i * h.channels))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 1))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 2))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 3)))).length ≤ obl.length)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
+    (hb0 : b0 < 256) (hb1 : b1 < 256) (hb2 : b2 < 256) (hb3 : b3 < 256)
+    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) :
+    ∃ st', ExS Gen.prog st0 tgaLoop0 .normal st' ∧ TgaLoopInvRaw st' h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 count := by
+  have hinv0' := hinv0
+  obtain ⟨_, _, _, _, hinfo0, hmemdat0, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩ := hinv0'
+  have aux : ∀ (k : Nat) (st : State) (i : Nat), count - i = k → TgaLoopInvRaw st h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 i →
+      ∃ st', ExS Gen.prog st tgaLoop0 .normal st' ∧ TgaLoopInvRaw st' h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 count := by
+    intro k
+    induction k with
+    | zero =>
+      intro st i hk hinv
+      obtain ⟨h16, h6, h7, hobM, hinfo, hmemdat, l0', l1', l2, l3, h8, h9, h10, h11, h12, h13, h14, h15, hro, hle⟩ := hinv
+      have hieq : i = count := by omega
+      have hlf : ¬ i < count := by omega
+      have hcond : EvE Gen.prog st (.bin .lt (some u64) (.var 16) (.var 10)) (boolVal false) :=
+        EvE.bin (EvE.var h16) (EvE.var h10) (by rw [bin_u64_lt, decide_eq_false hlf])
+      have hbE : ExS Gen.prog st (.ite (.bin .lt (some u64) (.var 16) (.var 10)) tgaPixelBody .brk) .brk st :=
+        ExS.ite (bc := false) hcond (by simp [truthy_boolVal]) ExS.brk
+      refine ⟨st, ExS.loop_brk hbE, ?_⟩
+      have hinv_re : TgaLoopInvRaw st h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 i := ⟨h16, h6, h7, hobM, hinfo, hmemdat, l0', l1', l2, l3, h8, h9, h10, h11, h12, h13, h14, h15, hro, hle⟩
+      exact hieq ▸ hinv_re
+    | succ k ih =>
+      intro st i hk hinv
+      obtain ⟨h16, h6, h7, hobM, hinfo, hmemdat, l0', l1', l2, l3, h8, h9, h10, h11, h12, h13, h14, h15, hro, hle⟩ := hinv
+      have hi : i < count := by omega
+      have hmem3 : st.mem 3 = st0.mem 3 := by rw [hinfo, hinfo0]
+      have hl16s : load st.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width) := by
+        rw [← load_ptr_congr st0.mem st.mem 3 16 (.int u32) hmem3.symm]; exact hl16_0
+      have hl20s : load st.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height) := by
+        rw [← load_ptr_congr st0.mem st.mem 3 20 (.int u32) hmem3.symm]; exact hl20_0
+      have hl26s : load st.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin) := by
+        rw [← load_ptr_congr st0.mem st.mem 3 26 (.int u8) hmem3.symm]; exact hl26_0
+      have hl27s : load st.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin) := by
+        rw [← load_ptr_congr st0.mem st.mem 3 27 (.int u8) hmem3.symm]; exact hl27_0
+      have hp_lt : p0 + i < p0 + count := by omega
+      have hinv_re : TgaLoopInvRaw st h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 i := ⟨h16, h6, h7, hobM, hinfo, hmemdat, l0', l1', l2, l3, h8, h9, h10, h11, h12, h13, h14, h15, hro, hle⟩
+      obtain ⟨st1, st2, hbE, hs, hinv2⟩ :=
+        ni_tga_loop0_step_raw st h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 i hinv_re hi hcount64 h32 hrawR hrawB hrle8 hhdr8 hbd3 hbdo hdat64
+          hl16s hl20s hl26s hl27s hw32 hh32 hwpos hhpos hch hchp hro8 hto8 hwh64 (hbnd (p0 + i) hp_lt) (hdbnd i hi) (hdob i hi) (hwbf i hi) hc hb0 hb1 hb2 hb3 hlob hob3
+      have hk' : count - (i + 1) = k := by omega
+      obtain ⟨st', hrec, hinv'⟩ := ih st2 (i + 1) hk' hinv2
+      exact ⟨st', ExS.loop_next hbE (Or.inl rfl) hs hrec, hinv'⟩
+  exact aux (count - i0) st0 i0 rfl hinv0
+
+end NANO.C.Proofs
