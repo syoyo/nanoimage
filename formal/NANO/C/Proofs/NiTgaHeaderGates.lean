@@ -110,3 +110,30 @@ theorem ev_tga_id (s : State) (size id : Nat)
     (EvE.var l1) (bin_u64_gt (18 + id) size)
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- `land` of two `boolVal`s evaluates to the `&&` of their Bool values. -/
+theorem land_step {s : State} {A B : Expr} {ba bb : Bool}
+    (hA : EvE Gen.prog s A (boolVal ba)) (hB : EvE Gen.prog s B (boolVal bb)) :
+    EvE Gen.prog s (.land A B) (boolVal (ba && bb)) := by
+  cases ba
+  · exact EvE.land_false hA (truthy_boolVal false)
+  · exact EvE.land_true hA (truthy_boolVal true) hB (truthy_boolVal bb)
+
+/-- Image-type validity gate (`!=2 && !=3 && !=10 && !=11`). -/
+theorem ev_tga_badtype (s : State) (b2 : Nat) (l5 : s.locals 5 = some (.int u8 b2))
+    (hb2 : b2 < 256) :
+    EvE Gen.prog s
+      (.land (.land (.land (.bin .ne (some u32) (.cast u32 (.var 5)) (.const (.int u32 2)))
+                          (.bin .ne (some u32) (.cast u32 (.var 5)) (.const (.int u32 3))))
+                     (.bin .ne (some u32) (.cast u32 (.var 5)) (.const (.int u32 10))))
+            (.bin .ne (some u32) (.cast u32 (.var 5)) (.const (.int u32 11))))
+      (boolVal (decide (b2 ≠ 2) && decide (b2 ≠ 3) && decide (b2 ≠ 10) && decide (b2 ≠ 11))) := by
+  have nb : ∀ k, EvE Gen.prog s (.bin .ne (some u32) (.cast u32 (.var 5)) (.const (.int u32 k)))
+      (boolVal (decide (b2 ≠ k))) :=
+    fun k => EvE.bin (EvE.cast (EvE.var l5) (u8_u32_cast b2 hb2)) (EvE.const _) (bin_u32_ne b2 k)
+  exact land_step (land_step (land_step (nb 2) (nb 3)) (nb 10)) (nb 11)
+
+end NANO.C.Proofs
