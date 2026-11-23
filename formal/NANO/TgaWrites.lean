@@ -156,8 +156,8 @@ theorem tgaFoldRaw_length (obl : List UInt8) (h : TgaInfo) (p0 off0 ch : Nat) (d
 /-- A pure `foldlM` over `List.range`, recording only the accumulator, equals the
     corresponding `foldl`. -/
 theorem foldlM_range_pure (n : Nat) (fN : Nat → List UInt8 → List UInt8) (b : List UInt8) :
-    (List.range n).foldlM (fun (st : Nat × List UInt8) i => pure (st.1, fN i st.2)) (0, b)
-      = some (0, (List.range n).foldl (fun acc i => fN i acc) b) := by
+    (List.range n).foldlM (fun (st : Nat × List UInt8) i => (pure (st.1, fN i st.2) : Except Nat (Nat × List UInt8)))
+      (0, b) = Except.ok (0, (List.range n).foldl (fun acc i => fN i acc) b) := by
   induction n with
   | zero => rfl
   | succ n ih => simp only [List.range_succ, List.foldlM_append, List.foldl_append]; rw [ih]; rfl
@@ -205,25 +205,25 @@ theorem tgaMaterialize_raw (n p0 off0 ch : Nat) (h : TgaInfo) (ws : List TgaWrit
 
 /-- An RLE packet's `foldlM` appends its `count` identical writes to the list. -/
 theorem foldlM_rle_writes (n o : Nat) (w : Nat → TgaWrite) (acc : List TgaWrite) :
-    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i => pure (st.1, st.2 ++ [w i])) (o, acc)
-      = some (o, acc ++ (List.range n).map w) := by
+    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i => (pure (st.1, st.2 ++ [w i]) : Except Nat (Nat × List TgaWrite)))
+      (o, acc) = Except.ok (o, acc ++ (List.range n).map w) := by
   induction n with
-  | zero => simp
+  | zero => show Except.ok (o, acc) = _; simp
   | succ n ih =>
     rw [List.range_succ, List.foldlM_append, ih]
-    change some (o, acc ++ List.map w (List.range n) ++ [w n]) = _
+    change Except.ok (o, acc ++ List.map w (List.range n) ++ [w n]) = _
     simp [List.map_append]
 
 /-- A raw packet's `foldlM` advances the data cursor by `ch` per pixel and
     appends each pixel's write. -/
 theorem foldlM_raw_writes (n o ch : Nat) (w : Nat → Nat → TgaWrite) (acc : List TgaWrite) :
-    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i => pure (st.1 + ch, st.2 ++ [w (st.1) i])) (o, acc)
-      = some (o + n * ch, acc ++ (List.range n).map (fun i => w (o + i * ch) i)) := by
+    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i => (pure (st.1 + ch, st.2 ++ [w (st.1) i]) : Except Nat (Nat × List TgaWrite)))
+      (o, acc) = Except.ok (o + n * ch, acc ++ (List.range n).map (fun i => w (o + i * ch) i)) := by
   induction n with
-  | zero => simp
+  | zero => show Except.ok (o, acc) = _; simp
   | succ n ih =>
     rw [List.range_succ, List.foldlM_append, ih]
-    change some (o + n * ch + ch, acc ++ List.map (fun i => w (o + i * ch) i) (List.range n) ++ [w (o + n * ch) n]) = _
+    change Except.ok (o + n * ch + ch, acc ++ List.map (fun i => w (o + i * ch) i) (List.range n) ++ [w (o + n * ch) n]) = _
     rw [show (o + n * ch) + ch = o + (n + 1) * ch from by rw [Nat.succ_mul]; omega]
     simp [List.map_append]
 
