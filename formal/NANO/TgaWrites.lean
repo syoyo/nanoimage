@@ -126,3 +126,30 @@ theorem tgaFoldI_length (obl : List UInt8) (h : TgaInfo) (p0 : Nat) (bytes : Lis
   | succ i ih => rw [tgaFoldI_succ, tgaWriteAt_length, ih]
 
 end NANO
+
+namespace NANO
+open NANO
+
+/-- Fold `i` successive uncompressed writes: pixel `j` reads bytes at
+    `off0 + j*ch` and lands at `tgaDstIndex h (p0+j)`. -/
+def tgaFoldRaw (obl : List UInt8) (h : TgaInfo) (p0 off0 ch : Nat) (dat : List UInt8) : Nat → List UInt8
+  | 0 => obl
+  | i + 1 => tgaWriteAt (tgaFoldRaw obl h p0 off0 ch dat i)
+      (tgaDstIndex h (p0 + i),
+       tgaPixelOut ch (UInt8.ofNat (byteAt dat (off0 + i * ch))) (UInt8.ofNat (byteAt dat (off0 + i * ch + 1)))
+         (UInt8.ofNat (byteAt dat (off0 + i * ch + 2))) (UInt8.ofNat (byteAt dat (off0 + i * ch + 3))))
+
+theorem tgaFoldRaw_succ (obl : List UInt8) (h : TgaInfo) (p0 off0 ch : Nat) (dat : List UInt8) (i : Nat) :
+    tgaFoldRaw obl h p0 off0 ch dat (i + 1)
+      = tgaWriteAt (tgaFoldRaw obl h p0 off0 ch dat i)
+          (tgaDstIndex h (p0 + i),
+           tgaPixelOut ch (UInt8.ofNat (byteAt dat (off0 + i * ch))) (UInt8.ofNat (byteAt dat (off0 + i * ch + 1)))
+             (UInt8.ofNat (byteAt dat (off0 + i * ch + 2))) (UInt8.ofNat (byteAt dat (off0 + i * ch + 3)))) := rfl
+
+theorem tgaFoldRaw_length (obl : List UInt8) (h : TgaInfo) (p0 off0 ch : Nat) (dat : List UInt8) (i : Nat) :
+    (tgaFoldRaw obl h p0 off0 ch dat i).length = obl.length := by
+  induction i with
+  | zero => rfl
+  | succ i ih => rw [tgaFoldRaw_succ, tgaWriteAt_length, ih]
+
+end NANO
