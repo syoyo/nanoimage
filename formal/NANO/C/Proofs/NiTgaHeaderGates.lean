@@ -224,3 +224,16 @@ theorem sizeMulOK_mul_lt (a b : Nat) (h : sizeMulOK a b = true) : a * b < 2 ^ 64
     simpa [Nat.mul_comm] using hlt
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- `rd16le d o` always fits in 16 bits. -/
+theorem rd16le_lt (d : List UInt8) (o : Nat) : rd16le d o < 65536 := by
+  unfold rd16le
+  have h1 := byteAt_lt d o
+  have h2 := byteAt_lt d (o + 1)
+  have : (2:Nat) ^ 8 = 256 := by decide
+  rw [this]; omega
+
+end NANO.C.Proofs
