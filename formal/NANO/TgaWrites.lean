@@ -227,4 +227,37 @@ theorem foldlM_raw_writes (n o ch : Nat) (w : Nat → Nat → TgaWrite) (acc : L
     rw [show (o + n * ch) + ch = o + (n + 1) * ch from by rw [Nat.succ_mul]; omega]
     simp [List.map_append]
 
+
+/-- A guarded raw-packet `foldlM` (throw 11 on overrun) equals the unguarded
+    fold when every read is in bounds. -/
+theorem foldlM_raw_safe (n o ch : Nat) (dat : List UInt8) (w : Nat → Nat → TgaWrite) (acc : List TgaWrite)
+    (hb : ∀ i, i < n → o + i * ch + ch ≤ dat.length) :
+    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i =>
+        (if st.1 + ch > dat.length then throw 11 else pure (st.1 + ch, st.2 ++ [w st.1 i]) : Except Nat (Nat × List TgaWrite)))
+      (o, acc) = Except.ok (o + n * ch, acc ++ (List.range n).map (fun i => w (o + i * ch) i)) := by
+  induction n with
+  | zero => show Except.ok (o, acc) = _; simp
+  | succ n ih =>
+    rw [List.range_succ, List.foldlM_append, ih (fun i hi => hb i (by omega))]
+    show List.foldlM (fun (st : Nat × List TgaWrite) i => (if st.1 + ch > dat.length then throw 11 else pure (st.1 + ch, st.2 ++ [w st.1 i]) : Except Nat (Nat × List TgaWrite))) (o + n * ch, acc ++ (List.range n).map (fun i => w (o + i * ch) i)) [n] = _
+    rw [List.foldlM_cons]
+    simp only [show ¬ ((o + n * ch) + ch > dat.length) from by have := hb n (by omega); omega, ite_false]
+    simp only [List.foldlM_nil, pure_bind]
+    rw [show (o + n * ch) + ch = o + (n + 1) * ch from by rw [Nat.succ_mul]; omega]
+    show (Except.ok (o + (n+1) * ch, acc ++ (List.range n).map (fun i => w (o + i * ch) i) ++ [w (o + n * ch) n]) : Except Nat (Nat × List TgaWrite)) = _
+    rw [List.map_append, List.map_cons, List.map_nil, List.append_assoc]
+
+
+/-- A guarded raw-packet `foldlM`, then a continuation, equals applying the
+    continuation to the unguarded fold's result. -/
+theorem foldlM_raw_cont (n o ch : Nat) (dat : List UInt8) (w : Nat → Nat → TgaWrite) (acc : List TgaWrite)
+    (hb : ∀ i, i < n → o + i * ch + ch ≤ dat.length)
+    (cont : Nat → List TgaWrite → Except Nat (List TgaWrite)) :
+    (do let res ← (List.range n).foldlM (fun (st : Nat × List TgaWrite) i =>
+          (if st.1 + ch > dat.length then throw 11 else pure (st.1 + ch, st.2 ++ [w st.1 i]) : Except Nat (Nat × List TgaWrite))) (o, acc)
+        cont res.1 res.2)
+      = cont (o + n * ch) (acc ++ (List.range n).map (fun i => w (o + i * ch) i)) := by
+  rw [foldlM_raw_safe _ _ _ dat _ acc hb]
+  rfl
+
 end NANO
