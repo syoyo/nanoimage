@@ -38,4 +38,5 @@ import NANO.C.Proofs.NiBmpDecodeInto
 import NANO.C.Proofs.NiBmpLoad
 import NANO.C.Proofs.NiTgaWritePixel
 import NANO.C.Proofs.NiTgaHeader
+import NANO.C.Proofs.NiTgaHeaderBody
 
