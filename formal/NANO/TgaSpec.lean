@@ -74,4 +74,20 @@ theorem tgaWritesAux_raw_pkt (dat : List UInt8) (h : TgaInfo) (fuel left off : N
       (fun o acc' => tgaWritesAux dat h fuel (left - ((byteAt dat off &&& 0x7f) + 1)) o acc')
   exact hcont
 
+
+/-- One uncompressed (rle=0) packet step of `tgaWritesAux`: exactly one write,
+    cursor advances by `channels`. -/
+theorem tgaWritesAux_rle0_pkt (dat : List UInt8) (h : TgaInfo) (fuel left off : Nat) (acc : List TgaWrite)
+    (hrle0 : h.rle = 0) (hleft : left ≠ 0)
+    (hbnd : off + h.channels ≤ dat.length) :
+    tgaWritesAux dat h (fuel + 1) left off acc
+      = tgaWritesAux dat h fuel (left - 1) (off + h.channels)
+          (acc ++ [(tgaDstIndex h (h.width * h.height - left),
+            tgaPixelOut h.channels (dat.getD off 0) (dat.getD (off + 1) 0) (dat.getD (off + 2) 0) (dat.getD (off + 3) 0))]) := by
+  rw [tgaWritesAux.eq_def]
+  simp only [Nat.reduceEqDiff, ↓reduceIte, hrle0, hleft, Bool.false_eq_true, reduceCtorEq, Nat.not_le, Nat.not_lt]
+  simp (config := { maxSteps := 2000000 })
+  rw [if_neg hleft]
+  rw [if_neg (show ¬ (dat.length < off + h.channels) from by omega)]
+
 end NANO
