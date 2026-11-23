@@ -1647,4 +1647,9 @@ theorem tgaFoldI_raw_eq (obl0 : List UInt8) (h : TgaInfo) (p0 off0 : Nat) (dat :
     tgaPixelOut_raw h.channels 0 0 255 (byteAt dat (off0 + j * h.channels)) (byteAt dat (off0 + j * h.channels + 1)) (byteAt dat (off0 + j * h.channels + 2)) (byteAt dat (off0 + j * h.channels + 3)) hc
   rw [e]
   simp [tgaFoldI, tgaFoldRaw]
+
+theorem tgaPixelOut_length (ch b0 b1 b2 b3 : Nat) (hc : ch = 1 ∨ ch = 3 ∨ ch = 4) :
+    (tgaPixelOut ch (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length = ch := by
+  rcases hc with rfl | rfl | rfl <;> simp [tgaPixelOut]
+
 end NANO.C.Proofs
