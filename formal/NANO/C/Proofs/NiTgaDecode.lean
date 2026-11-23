@@ -1184,3 +1184,21 @@ abbrev tgaL1Body : Stmt :=
   .ite (.bin .lt (some u64) (.var 6) (.var 5)) tgaL1Big .brk
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+abbrev tgaL1PreFrame (cont : Stmt) : Stmt :=
+  .seq (.set 10 (.cast u64 (.const (.int u32 1))))
+  (.seq (.set 11 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 12 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 13 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 14 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 15 (.cast u8 (.const (.int u32 255))))
+  (.seq (.ite (.bin .ne (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) tgaL1Hdr .skip)
+  (.seq tgaL1Chk
+        (.seq (.ite (.lor (.bin .eq (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 128))) (.const (.int u32 0)))) tgaL1Bytes .skip) cont))))))))
+
+theorem tgaL1Big_eq : tgaL1Big = tgaL1PreFrame (.seq (.set 16 (.cast u64 (.const (.int u32 0)))) tgaLoop0) := rfl
+
+end NANO.C.Proofs
