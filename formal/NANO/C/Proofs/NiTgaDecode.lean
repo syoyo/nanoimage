@@ -14,6 +14,7 @@ import NANO.C.Proofs.NiGeometryTail
 import NANO.C.Proofs.NiBmpDecode
 import NANO.C.Proofs.NiTgaHeader
 import NANO.C.Proofs.NiTgaWritePixel
+import NANO.TgaArith
 
 set_option linter.unusedVariables false
 set_option linter.unusedSimpArgs false
@@ -137,5 +138,129 @@ theorem ni_tga_decode_preamble (m : Mem) (bd : Nat) (size : Nat) (ob : Nat) (out
   have hs6 : ExS Gen.prog s4 (.set 6 (.cast u64 (.const (.int i32 0)))) .normal
       { s4 with locals := s4.locals.upd 6 (.int u64 0) } := ExS.set h6
   exact ExS.seq hs8 (ExS.seq hs9 (ExS.seq hs5 (ExS.seq hs7 hs6)))
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+abbrev tgaDstCompute : Stmt :=
+  (.seq (.set 21 (.cast u32 (.bin .mod (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16))))))
+  (.seq (.set 22 (.cast u32 (.bin .div (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16))))))
+  (.seq (.set 23 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 27))) (.const (.int u32 0)))
+                        (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 16)) (.const (.int u32 1))) (.var 21))
+                        (.var 21)))
+  (.seq (.set 24 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 26))) (.const (.int u32 0)))
+                        (.var 22)
+                        (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 20)) (.const (.int u32 1))) (.var 22))))
+        (.set 25 (.bin .mul (some u64) (.bin .add (some u64) (.bin .mul (some u64) (.cast u64 (.var 24)) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))) (.cast u64 (.var 23))) (.cast u64 (.var 8))))))))
+
+theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8)
+    (hm : s.mem 3 = some obl) (h32 : obl.length = 32)
+    (l2 : s.locals 2 = some (.ptr 3 0)) (l6 : s.locals 6 = some (.int u64 p))
+    (l8 : s.locals 8 = some (.int u8 h.channels))
+    (hl16 : load s.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load s.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load s.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load s.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width)
+    (hpw : p / h.width < 2 ^ 32) (hch : h.channels < 256)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256) (hp : p < 2 ^ 64)
+    (hhpos : 0 < h.height) (hpp : p < h.width * h.height)
+    (hmul : tgaDstY h p * h.width < 2 ^ 64)
+    (hadd : tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64)
+    (hidx : (tgaDstY h p * h.width + tgaDstX h p) * h.channels < 2 ^ 64) :
+    ∃ s', ExS Gen.prog s tgaDstCompute .normal s' ∧
+      s'.locals 21 = some (.int u32 (p % h.width)) ∧
+      s'.locals 22 = some (.int u32 (p / h.width)) ∧
+      s'.locals 23 = some (.int u32 (tgaDstX h p)) ∧
+      s'.locals 24 = some (.int u32 (tgaDstY h p)) ∧
+      s'.locals 25 = some (.int u64 (tgaDstIndex h p)) ∧ s'.mem = s.mem := by
+  have hpl : p % h.width < h.width := Nat.mod_lt _ hwpos
+  have hqp : p / h.width ≤ p := Nat.div_le_self _ _
+  have hpwh : p / h.width < h.height := Nat.div_lt_of_lt_mul hpp
+  let s1 : State := { s with locals := s.locals.upd 21 (.int u32 (p % h.width)) }
+  let s2 : State := { s1 with locals := s1.locals.upd 22 (.int u32 (p / h.width)) }
+  let s3 : State := { s2 with locals := s2.locals.upd 23 (.int u32 (tgaDstX h p)) }
+  let s4 : State := { s3 with locals := s3.locals.upd 24 (.int u32 (tgaDstY h p)) }
+  let s5 : State := { s4 with locals := s4.locals.upd 25 (.int u64 (tgaDstIndex h p)) }
+  have m1 : s1.mem = s.mem := rfl
+  have m2 : s2.mem = s.mem := rfl
+  have m3 : s3.mem = s.mem := rfl
+  have m4 : s4.mem = s.mem := rfl
+  have ld : ∀ (st : State), st.locals 2 = some (.ptr 3 0) → st.mem = s.mem →
+      ∀ (o : Nat), o ≤ obl.length → ∀ (ty : Ty) (v : Val), load st.mem ty (.ptr 3 o) = .ok v →
+      EvE Gen.prog st (.load ty (.field (.var 2) o)) v := by
+    intro st h2 hmst o ho ty v hl
+    exact EvE.load (EvE.field (EvE.var h2) (ptrAddN_ok (by rw [hmst]; exact hm) (by omega))) (by simpa using hl)
+  have l2_1 : s1.locals 2 = some (.ptr 3 0) := by simp [s1, Locals.upd_ne, l2]
+  have l2_2 : s2.locals 2 = some (.ptr 3 0) := by simp [s2, Locals.upd_ne, l2_1]
+  have l2_3 : s3.locals 2 = some (.ptr 3 0) := by simp [s3, Locals.upd_ne, l2_2]
+  have l2_4 : s4.locals 2 = some (.ptr 3 0) := by simp [s4, Locals.upd_ne, l2_3]
+  have l6_1 : s1.locals 6 = some (.int u64 p) := by simp [s1, Locals.upd_ne, l6]
+  have v21 : s1.locals 21 = some (.int u32 (p % h.width)) := by simp [s1, Locals.upd_same]
+  have v21' : s2.locals 21 = some (.int u32 (p % h.width)) := by simp [s2, Locals.upd_ne, v21]
+  have v22 : s2.locals 22 = some (.int u32 (p / h.width)) := by simp [s2, Locals.upd_same]
+  have v22' : s3.locals 22 = some (.int u32 (p / h.width)) := by simp [s3, Locals.upd_ne, v22]
+  have h24s : s4.locals 24 = some (.int u32 (tgaDstY h p)) := by simp [s4, Locals.upd_same]
+  have h23s : s3.locals 23 = some (.int u32 (tgaDstX h p)) := by simp [s3, Locals.upd_same]
+  have h8s : s4.locals 8 = some (.int u8 h.channels) := by simp [s4, s3, s2, s1, Locals.upd_ne, l8]
+  -- set 21
+  have h21 : EvE Gen.prog s (.cast u32 (.bin .mod (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16))))) (.int u32 (p % h.width)) :=
+    EvE.cast (EvE.bin (EvE.var l6) (EvE.cast (ld s l2 rfl 16 (by omega) (.int u32) (.int u32 h.width) hl16) (u32_u64_cast h.width hw32))
+      (bin_u64_mod p h.width (by omega) hp)) (u64_u32_trunc_cast (p % h.width) (by omega))
+  -- set 22
+  have h22 : EvE Gen.prog s1 (.cast u32 (.bin .div (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16))))) (.int u32 (p / h.width)) :=
+    EvE.cast (EvE.bin (EvE.var l6_1) (EvE.cast (ld s1 l2_1 m1 16 (by omega) (.int u32) (.int u32 h.width) hl16) (u32_u64_cast h.width hw32))
+      (bin_u64_div p h.width (by omega))) (u64_u32_trunc_cast (p / h.width) hpw)
+  -- set 23
+  have hc23 : EvE Gen.prog s2 (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 27))) (.const (.int u32 0))) (boolVal (decide (h.rightOrigin ≠ 0))) :=
+    EvE.bin (EvE.cast (ld s2 l2_2 m2 27 (by omega) (.int u8) (.int u8 h.rightOrigin) hl27) (u8_u32_cast h.rightOrigin hro8)) (EvE.const (v := .int u32 0)) (bin_u32_ne h.rightOrigin 0)
+  have h23i : s2.locals 21 = some (.int u32 (p % h.width)) := v21'
+  have h23 : EvE Gen.prog s2 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 27))) (.const (.int u32 0)))
+        (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 16)) (.const (.int u32 1))) (.var 21)) (.var 21)) (.int u32 (tgaDstX h p)) := by
+    rw [tgaDstX]
+    by_cases hr : h.rightOrigin ≠ 0
+    · rw [if_pos hr]
+      refine EvE.cond hc23 (by rw [decide_eq_true hr]; exact truthy_boolVal true) ?_
+      exact EvE.bin (EvE.bin (ld s2 l2_2 m2 16 (by omega) (.int u32) (.int u32 h.width) hl16) (EvE.const (v := .int u32 1)) (bin_u32_sub h.width 1 (by omega)))
+        (EvE.var h23i) (bin_u32_sub (h.width - 1) (p % h.width) (by omega))
+    · rw [if_neg hr]
+      refine EvE.cond hc23 (by rw [decide_eq_false hr]; exact truthy_boolVal false) ?_
+      exact EvE.var h23i
+  -- set 24
+  have hc24 : EvE Gen.prog s3 (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 26))) (.const (.int u32 0))) (boolVal (decide (h.topOrigin ≠ 0))) :=
+    EvE.bin (EvE.cast (ld s3 l2_3 m3 26 (by omega) (.int u8) (.int u8 h.topOrigin) hl26) (u8_u32_cast h.topOrigin hto8)) (EvE.const (v := .int u32 0)) (bin_u32_ne h.topOrigin 0)
+  have h24i : s3.locals 22 = some (.int u32 (p / h.width)) := v22'
+  have h24 : EvE Gen.prog s3 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 26))) (.const (.int u32 0)))
+        (.var 22) (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 20)) (.const (.int u32 1))) (.var 22))) (.int u32 (tgaDstY h p)) := by
+    rw [tgaDstY]
+    by_cases ht : h.topOrigin ≠ 0
+    · rw [if_pos ht]
+      refine EvE.cond hc24 (by rw [decide_eq_true ht]; exact truthy_boolVal true) ?_
+      exact EvE.var h24i
+    · rw [if_neg ht]
+      refine EvE.cond hc24 (by rw [decide_eq_false ht]; exact truthy_boolVal false) ?_
+      exact EvE.bin (EvE.bin (ld s3 l2_3 m3 20 (by omega) (.int u32) (.int u32 h.height) hl20) (EvE.const (v := .int u32 1)) (bin_u32_sub h.height 1 (by omega)))
+        (EvE.var h24i) (bin_u32_sub (h.height - 1) (p / h.width) (by omega))
+  -- set 25
+  have h25 : EvE Gen.prog s4 (.bin .mul (some u64) (.bin .add (some u64) (.bin .mul (some u64) (.cast u64 (.var 24)) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))) (.cast u64 (.var 23))) (.cast u64 (.var 8))) (.int u64 (tgaDstIndex h p)) := by
+    rw [tgaDstIndex_eq]
+    exact EvE.bin
+      (EvE.bin
+        (EvE.bin (EvE.cast (EvE.var h24s) (u32_u64_cast (tgaDstY h p) (by have := tgaDstY_lt h p hhpos hpp; omega)))
+          (EvE.cast (ld s4 l2_4 m4 16 (by omega) (.int u32) (.int u32 h.width) hl16) (u32_u64_cast h.width hw32))
+          (bin_u64_mul (tgaDstY h p) h.width hmul))
+        (EvE.cast (EvE.var h23s) (u32_u64_cast (tgaDstX h p) (by have := tgaDstX_lt h p hwpos; omega)))
+        (bin_u64_add (tgaDstY h p * h.width) (tgaDstX h p) hadd))
+      (EvE.cast (EvE.var h8s) (u8_u64_cast h.channels hch))
+      (bin_u64_mul (tgaDstY h p * h.width + tgaDstX h p) h.channels hidx)
+  refine ⟨s5, ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.set h25)))), ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · rfl
 
 end NANO.C.Proofs
