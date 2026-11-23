@@ -78,3 +78,31 @@ theorem tgaMaterialize_snoc (n : Nat) (ws : List TgaWrite) (w : TgaWrite) :
   simp only [tgaMaterialize, List.foldl_append, List.foldl_cons, List.foldl_nil]
 
 end NANO
+
+namespace NANO
+
+theorem tgaWriteAt_append (buf : List UInt8) (i : Nat) (bs cs : List UInt8)
+    (h : i + bs.length + cs.length ≤ buf.length) :
+    tgaWriteAt (tgaWriteAt buf (i, bs)) (i + bs.length, cs)
+      = buf.take i ++ bs ++ cs ++ buf.drop (i + bs.length + cs.length) := by
+  have h1 : i + bs.length ≤ buf.length := by omega
+  have inner := tgaWriteAt_eq buf i bs h1
+  have hlen : (buf.take i ++ bs).length = i + bs.length := by
+    rw [List.length_append, List.length_take, Nat.min_eq_left (by omega)]
+  have htake : (buf.take i ++ bs ++ buf.drop (i + bs.length)).take (i + bs.length) = buf.take i ++ bs := by
+    conv => lhs; rw [show i + bs.length = (buf.take i ++ bs).length from hlen.symm]
+    rw [List.take_append_length]
+  have hdrop : (buf.take i ++ bs ++ buf.drop (i + bs.length)).drop (i + bs.length + cs.length)
+      = buf.drop (i + bs.length + cs.length) := by
+    conv => lhs; rw [show i + bs.length + cs.length = (buf.take i ++ bs).length + cs.length from by rw [hlen]]
+    rw [List.drop_length_add_append, List.drop_drop]
+  have h2 : i + bs.length + cs.length ≤ (buf.take i ++ bs ++ buf.drop (i + bs.length)).length := by
+    have : (buf.take i ++ bs ++ buf.drop (i + bs.length)).length = buf.length := by
+      simp [List.length_append, List.length_take, List.length_drop, Nat.min_eq_left (by omega)]
+      omega
+    rw [this]; omega
+  rw [inner]
+  rw [tgaWriteAt_eq (buf.take i ++ bs ++ buf.drop (i + bs.length)) (i + bs.length) cs h2]
+  rw [htake, hdrop]
+
+end NANO
