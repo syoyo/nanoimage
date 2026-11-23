@@ -1,88 +1,51 @@
 # nanoimage Lean verification: resumption prompt
 
-Repository: `~/work/nanoimage`. Last commit: C1 (Phase 2 decode composition
-groundwork). `git log` for history.
+Repository: `~/work/nanoimage`. Current git head: `cb7f5e3` (Phase 3 groundwork).
+Active continuation plan: `~/.commandcode/plans/nanoimage-formalization-status-and-plan.md`.
+Status: `formal/VERIFICATION.md`. Method: `formal/README.md`.
 
-Plan of record: `/home/syoyo/.opencode/plan/nanoimage-lean-verification.md`.
-Remaining-work plan: `~/.commandcode/plans/nanoimage-formal-remaining-phases.md`.
-Status doc: `formal/VERIFICATION.md`. Method doc: `formal/README.md`.
+## Current state
 
-## Where things stand
+- **Phase 0/1 complete**: MiniC infra, translator/cdiff, shared core helper proofs in `formal/NANO/C/Proofs/Core.lean`.
+- **Phase 2 BMP complete**: `ni_bmp_header_exs`, `ni_bmp_decode_into_ok_exs` (all-pixels-OK), `ni_bmp_load_exs` proven, axioms `[propext, Classical.choice, Quot.sound]`.
+- **Phase 3 TGA groundwork complete, proofs pending**:
+  - C: `src/nanoimage_tga_core.c`, shell `src/nanoimage_tga.c`, `ni_tga_info`/`NI_TGA_ERR_*` in `src/nanoimage_core.h`.
+  - Spec: `formal/NANO/Tga.lean` (`tgaHeader`, `tgaWritesAux` fuel=pixel count, `tgaMaterialize` by `List.set`, `tgaPixels/tgaDecode`).
+  - Translation: Gen fids 21-23; write_pixel is statement-call in decode (avoid expr-call `ro=true` UB).
+  - Diff: cdiff arms in `formal/CDiff.lean`, `formal/tools/{cdiff_c.c,cdiff.py}`; 4800 cases / 0 mismatches total (600 TGA).
+  - Lean proofs: **not started**. No `formal/NANO/C/Proofs/*Tga*`; `NANO.lean` has no TGA proof imports.
 
-Phase 0 (infrastructure) done. Phase 1 (shared leaves) done. Phase 2 (BMP):
+## Baseline gates (revalidated 2026-11-23)
 
-- `ni_bmp_header_exs` proven end-to-end (axioms
-  `[propext, Classical.choice, Quot.sound]`), now with a **guarded memory
-  export**: on success the info object holds `bmpHeaderFinalBlock d gout`
-  (`NiBmpHeaderCompose.lean`: `bmpHeadBlock`, `bmpHeaderFinalBlock`,
-  `header_stores_exs` + memory export, `ni_bmp_header_rem_stores_exs`,
-  `ni_bmp_header_rem_exs`, `ni_bmp_header_exs` — all with the export).
-- **`ni_bmp_decode_into_ok_exs` is PROVEN** (`NiBmpDecodeInto.lean`) —
-  all-pixels-OK case, axioms clean. Key moves vs the old notes: the `e`
-  rewrite closes with `ac_rfl`; `hch8` was replaced by
-  `hc32 : h.channels = (if h.bitCount = 32 then 4 else 3)` plus `hrsd` and
-  `hobl64` hypotheses; the 8-bit branch calls `loop1_iter` DIRECTLY (it takes
-  an arbitrary state with pointwise locals hypotheses — no bridge lemma
-  needed, despite what the old notes say about the row-entry frame); the
-  direct branch evaluates `.set 19` via `EvE.cond` + `hc32` and calls
-  `loop3_iter` directly; the tail is `ExS.seq … (ExS.ret (EvE.const _))`
-  through an `hFin` assembler; the memory conclusion rewrites `bmpRowSize h`.
-- New `formal/NANO/C/Proofs/NiBmpLoad.lean` (imported by `NANO.lean`):
-  - 19 field-slice lemmas, layered per store stage
-    (`arithBlock_*`, `palBlock_*`, `headBlock_*`, then the ten
-    `bmpHeaderFinalBlock_*` slices + length). Layering matters: a one-shot
-    flat-rewrite of the 3-constructor block hits kernel deep recursion.
-  - `bmpHeaderInfoOf d` (spec witness) and `bmpHeader_ok_of_stages`
-    (five stage verdicts ⇒ `bmpHeader size d = .ok (bmpHeaderInfoOf d)`),
-    modeled on `bmpHeaderCode_zero_of_ok` and using the existing
-    `bmpOutputCompose_ok_8` / `bmpOutputCompose_ok_ne8`.
-- `ExS.call_ret` in `Logic.lean`: statement-level call of a value-returning
-  function (result discarded, caller continues with `.normal`).
-- Gates all green: `make test`, `make lean-check` (lake build + c2lean
-  --check), `make lean-diff` (4200 cases, 0 mismatches).
+- `make test` — pass
+- `make lean-check` — pass (`lake build` + `c2lean.py --check`)
+- `make lean-diff` — pass, 4800 cases, 0 mismatches
 
-## Phase 2 is COMPLETE (commit C3)
+## Immediate next work (M1-M4)
 
-`ni_bmp_load_exs` (`NiBmpLoad.lean`) is proven: under the five stage verdicts,
-header (fid 15) then decode (fid 16) returns 0 and the output block holds the
-flattened `bmpPixels` bytes for `h = bmpHeaderInfoOf d`; axioms
-`[propext, Classical.choice, Quot.sound]`. All gates green (`make test`,
-`make lean-check`, cdiff).
+1. **M1 `ni_tga_header_exs`**: staged refinement like BMP header but simpler (no geometry sign/INT_MIN split). Export info-block predicate/constructor for composition.
+2. **M2 `ni_tga_write_pixel_exs`**: per-channel store proof (1/3/4), statement-call-friendly wrapper; bad channels return 0, no writes.
+3. **M3 decode loops + `ni_tga_decode_into_ok_exs`**: bridge `tgaMaterialize` write-list/List.set spec to in-place buffer early. Inner loop over packet pixels; outer loop induction over remaining pixels (`n_pixels - pixel_index`).
+4. **M4 `ni_tga_load_exs`**: compose header fid21 then decode fid23; update VERIFICATION/resume; close Phase 3.
 
-Key pieces added to get there:
-- Framing exports `∀ b ≠ 3, s'.mem b = s.mem b` on every header stage
-  (`mem_upd_other_blk` peel; threaded through geometry/arith/palette/stores/
-  prelude/rem/header).
-- Decode chain: locals-25 invariant dropped from `loop2_iter`/`loop3_iter`;
-  info block unified to 3; `ni_bmp_decode_into_ok_exs` over the 5-param call
-  frame; palette-read bounds (`hpos8`/`hidx8`) conditional on `bitCount = 8`.
-- `ExS.call_ret` (Logic.lean); `bmpHeaderInfoOf` + `bmpHeader_ok_of_stages`;
-  the ten `bmpHeaderFinalBlock` field slices; the bound bundles
-  `bmpHeaderInfoOf_stage_facts` (17-way conjunction), `_px8`, `_pos8`,
-  `_idx8` (factor monolithic derivations — the kernel chokes otherwise).
+## Key constraints
 
-## Phase 3 (TGA) — C/translation/spec/diff done, proofs remain
+- No `sorry`/`admit`; axioms only `[propext, Classical.choice, Quot.sound]`; no `native_decide`.
+- `Gen.lean` generated only via `python3 formal/tools/c2lean.py`.
+- Factor proofs aggressively (separate lemmas/files) to avoid kernel deep recursion.
+- Preserve TGA statement-call pattern for `ni_tga_write_pixel`.
+- Run `#print axioms` on new top theorems; keep `make test`, `make lean-check`, `make lean-diff` green before each commit.
 
-- `src/nanoimage_tga_core.c` (core: `ni_tga_header`/`ni_tga_write_pixel`/
-  `ni_tga_decode_into`, `NI_TGA_ERR_*`) + `src/nanoimage_tga.c` shell;
-  `ni_tga_info` in `src/nanoimage_core.h`. `ni_size_mul(&local)` replaced by
-  `ni_bmp_mul_fits` + plain products (translator rejects `&local`); writes via
-  base+index subscripts (no pointer arithmetic); sample bytes are four scalar
-  locals (no local arrays).
-- **Translator trap**: expression-calls run with `ro = true` in MiniC — a
-  callee that stores is UB there. `if (!ni_tga_write_pixel(...))` was UB in
-  MiniC; bind the result to a local first (`wr = ...; if (!wr) ...`).
-- `Gen.lean` fids 21–23; `Nano/Tga.lean` spec (fuel-based packet-stream
-  `tgaWritesAux`, `List.set`-materialised writes); cdiff arms in
-  `cdiff_c.c`/`CDiff.lean`/`cdiff.py` (`tga_file` generator).
-- Gates: 4800 cases, 0 mismatches; `make test`, `make lean-check` green.
+## Useful commands
 
-Next (Phase 3 proofs): `ni_tga_header_exs` (staged like BMP's, simpler — no
-geometry stage), `ni_tga_write_pixel_exs` (per-pixel store, like
-`ni_bmp_decode_raw_pixel_exs`), then the loops (`tgaWritesAux`'s fuel =
-pixel count; the C's `loop0` = inner per-pixel for, `loop1` = outer packet
-while, with the `count ≤ pixels_left` invariant), then the composed load.
-Commits C5/C6 per the remaining-work plan.
+```sh
+cd ~/work/nanoimage
+make test
+make lean-check
+make lean-diff
+python3 formal/tools/c2lean.py --check
+cd formal && lake build NANO.C.Proofs.<Module>
+```
 
 ## Key implementation notes (Phase 2 + composition work)
 

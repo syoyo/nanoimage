@@ -8,9 +8,9 @@ of scope. See `formal/README.md` for the method.
 
 | Gate | Command | Status |
 |---|---|---|
-| Lean build | `make lean-check` (`cd formal && lake build`) | green; **no `sorry` anywhere** — `ni_bmp_header_exs` is fully proven (`NANO/C/Proofs/NiBmpHeaderCompose.lean` for everything after the readers, `NANO/C/Proofs/NiBmpHeader.lean` for the top-level sig/layout gates) |
+| Lean build | `make lean-check` (`cd formal && lake build` + `c2lean.py --check`) | green; no `sorry` in merged proofs |
 | Translator up to date | `python3 formal/tools/c2lean.py --check` | green |
-| Three-way differential (C under ASan/UBSan == MiniC == Lean spec) | `make lean-diff` (`formal/tools/cdiff.py --n 300`) | green, 4200 cases, 0 mismatches |
+| Three-way differential (C under ASan/UBSan == MiniC == Lean spec) | `make lean-diff` (`formal/tools/cdiff.py --n 300`) | green, 4800 cases, 0 mismatches (includes BMP + TGA) |
 | Unit tests | `make test` | green |
 
 Axioms (`#print axioms`): every proven theorem depends only on the standard
@@ -64,8 +64,8 @@ No `native_decide`, no `bv_decide`.
 | 3 | TGA core/shell split (`src/nanoimage_tga_core.c`: `ni_tga_header`, `ni_tga_write_pixel`, `ni_tga_decode_into` with `NI_TGA_ERR_*` codes; shell in `src/nanoimage_tga.c`) | done; `make test` green |
 | 3 | TGA translation (fids 21–23 in `Gen.lean`; the write call is a statement-call — expression-calls run under `ro=true` and may not write) | done; `c2lean --check` green |
 | 3 | TGA spec `NANO/Tga.lean` (`TgaInfo`, staged gates, sequential packet-stream `tgaPixels` with origin flip) | done |
-| 3 | TGA differential (C == MiniC == spec; RLE + raw, palettes rejected) | green — `make lean-diff` is now 4800 cases (600 TGA), 0 mismatches |
-| 3 | TGA refinement proofs (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop refinements, composed load) | not started |
+| 3 | TGA differential (C == MiniC == spec; RLE + raw, palettes rejected) | green — `make lean-diff` 4800 cases (600 TGA), 0 mismatches |
+| 3 | TGA refinement proofs (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop refinements, composed load) | **in progress** (M1–M4 of continuation plan) |
 | 4 | GIF | not started |
 | 5 | PNG container (inflate is an oracle until phase 6) | not started |
 | 6 | Verified DEFLATE / zlib, default switch | not started |
@@ -154,38 +154,26 @@ Kernel notes (no `unsafe`, no `native_decide`):
 
 ## Known gaps and boundaries
 
-* Phase 1 is complete: all helpers listed above are proven.
-* Phase 2 has the BMP core, spec, differential gate, geometry check, header,
-  per-pixel helpers, all four decode loops, and the top-level decode
-  composition proven end-to-end: `ni_bmp_decode_into_ok_exs`
-  (`NiBmpDecodeInto.lean`) covers the all-pixels-OK case of
-  `ni_bmp_decode_into` — no UB, returns 0, and the output block holds the
-  flattened `bmpRowsBytes` bytes — with axioms
-  `[propext, Classical.choice, Quot.sound]`. The proof consumes
-  `loop1_iter`/`loop3_iter` directly (pointwise state hypotheses), so no
-  frame-bridging was needed.
-* Phase 2 is **complete**: the composed load `ni_bmp_load_exs`
-  (`NiBmpLoad.lean`) is proven — under the five stage verdicts
-  (signature, layout, geometry, arith, palette; equivalently
-  `bmpHeaderCode = 0`), running `ni_bmp_header` (fid 15) then
-  `ni_bmp_decode_into` (fid 16) returns 0 and the output block holds
-  `bmpRowsBytes d h h.height ++ out.drop (h.height * bmpRowSize h)` for
-  `h = bmpHeaderInfoOf d`, with `bmpHeader d.length d = .ok h`. Axioms
-  `[propext, Classical.choice, Quot.sound]`. Supporting pieces: framing
-  exports on every header stage (`∀ b ≠ 3, s'.mem b = s.mem b`, from
-  `mem_upd_other_blk`), `ExS.call_ret`, the decode theorem restated over
-  the 5-parameter call frame with the info block unified to block 3, the
-  ten `bmpHeaderFinalBlock` field slices, the witness `bmpHeaderInfoOf`,
-  the reconstruction `bmpHeader_ok_of_stages`, and the bound bundles
-  (`bmpHeaderInfoOf_stage_facts`, `_px8`, `_pos8`, `_idx8`). Boundary
-  notes: the composite covers the all-pixels-OK case (decode-side failure
-  codes remain cdiff-gated); the shell (allocation, `ni_image` fill,
-  error strings) stays unverified.
+* Phase 1 is complete: all shared core helpers listed above are proven.
+* Phase 2 (BMP) is **complete**: `ni_bmp_header_exs`, `ni_bmp_decode_into_ok_exs`
+  (all-pixels-OK case), and `ni_bmp_load_exs` are proven with axioms
+  `[propext, Classical.choice, Quot.sound]`. Decode-side mid-decode failure
+  codes are covered by cdiff, not by a dedicated failure theorem.
+* Phase 3 (TGA) groundwork is complete (core/shell split, spec, Gen fids 21-23,
+  cdiff 600 TGA cases). **TGA refinement proofs are not started yet**
+  (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop refinements,
+  composed load). This is the active continuation target (M1-M4 in
+  `~/.commandcode/plans/nanoimage-formalization-status-and-plan.md`).
+* Phases 4-9 (GIF, PNG container/oracle, verified DEFLATE, JPEG integer IDCT,
+  composition/assurance/CI) are not started.
+* TGA proof boundary (current): C/spec/translation/cdiff are in place, but Lean
+  refinement proofs for TGA are pending. Do not claim TGA verified until
+  `ni_tga_header_exs`, `ni_tga_write_pixel_exs`, decode-loop refinement, and
+  composed load theorems land with axiom-clean `#print axioms`.
 * `ni_bmp_header_exs` composition note: the final theorem was assembled only
   after factoring the whole post-reader pipeline into standalone lemmas,
   because the monolithic term deep-recursed the Lean kernel even at
-  `maxRecDepth = 2×10⁹`. The same technique now applies to
-  `ni_bmp_decode_into`.
+  `maxRecDepth = 2×10⁹`. Apply the same factoring discipline to TGA.
 * `ni_read_packed_bits` and `ni_scale_to_8bit` are proven under PNG-valid
   bit depths (1, 2, 4, 8 for packed bits; 1..8 for scaling). Other depths are
   not a valid PNG input, so the theorems do not state a result for them.
