@@ -144,16 +144,18 @@ end NANO.C.Proofs
 namespace NANO.C.Proofs
 open NANO NANO.C
 
-abbrev tgaDstCompute : Stmt :=
-  (.seq (.set 21 (.cast u32 (.bin .mod (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16))))))
-  (.seq (.set 22 (.cast u32 (.bin .div (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16))))))
-  (.seq (.set 23 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 27))) (.const (.int u32 0)))
+abbrev tgaSet21 : Stmt := .set 21 (.cast u32 (.bin .mod (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))))
+abbrev tgaSet22 : Stmt := .set 22 (.cast u32 (.bin .div (some u64) (.var 6) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))))
+abbrev tgaSet23 : Stmt := .set 23 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 27))) (.const (.int u32 0)))
                         (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 16)) (.const (.int u32 1))) (.var 21))
-                        (.var 21)))
-  (.seq (.set 24 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 26))) (.const (.int u32 0)))
+                        (.var 21))
+abbrev tgaSet24 : Stmt := .set 24 (.cond (.bin .ne (some u32) (.cast u32 (.load (.int u8) (.field (.var 2) 26))) (.const (.int u32 0)))
                         (.var 22)
-                        (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 20)) (.const (.int u32 1))) (.var 22))))
-        (.set 25 (.bin .mul (some u64) (.bin .add (some u64) (.bin .mul (some u64) (.cast u64 (.var 24)) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))) (.cast u64 (.var 23))) (.cast u64 (.var 8))))))))
+                        (.bin .sub (some u32) (.bin .sub (some u32) (.load (.int u32) (.field (.var 2) 20)) (.const (.int u32 1))) (.var 22)))
+abbrev tgaSet25 : Stmt := .set 25 (.bin .mul (some u64) (.bin .add (some u64) (.bin .mul (some u64) (.cast u64 (.var 24)) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))) (.cast u64 (.var 23))) (.cast u64 (.var 8)))
+
+abbrev tgaDstCompute : Stmt := .seq tgaSet21 (.seq tgaSet22 (.seq tgaSet23 (.seq tgaSet24 tgaSet25)))
+abbrev tgaDstFrame (cont : Stmt) : Stmt := .seq tgaSet21 (.seq tgaSet22 (.seq tgaSet23 (.seq tgaSet24 (.seq tgaSet25 cont))))
 
 theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8)
     (hm : s.mem 3 = some obl) (h32 : obl.length = 32)
@@ -170,7 +172,7 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
     (hmul : tgaDstY h p * h.width < 2 ^ 64)
     (hadd : tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64)
     (hidx : (tgaDstY h p * h.width + tgaDstX h p) * h.channels < 2 ^ 64) :
-    ∃ s', ExS Gen.prog s tgaDstCompute .normal s' ∧
+    ∃ s', (∀ (cont : Stmt) (o : Outcome) (sf : State), ExS Gen.prog s' cont o sf → ExS Gen.prog s (tgaDstFrame cont) o sf) ∧
       (∀ j, j ≠ 21 → j ≠ 22 → j ≠ 23 → j ≠ 24 → j ≠ 25 → s'.locals j = s.locals j) ∧
       s'.locals 21 = some (.int u32 (p % h.width)) ∧
       s'.locals 22 = some (.int u32 (p / h.width)) ∧
@@ -261,7 +263,7 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
         (bin_u64_add (tgaDstY h p * h.width) (tgaDstX h p) hadd))
       (EvE.cast (EvE.var h8s) (u8_u64_cast h.channels hch))
       (bin_u64_mul (tgaDstY h p * h.width + tgaDstX h p) h.channels hidx)
-  refine ⟨s5, ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.set h25)))),
+  refine ⟨s5, (fun cont o sf hcont => ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.seq (ExS.set h25) hcont))))),
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro j h1 h2 h3 h4 h5
     simp [s5, s4, s3, s2, s1, Locals.upd_ne, h1, h2, h3, h4, h5]
@@ -434,8 +436,7 @@ abbrev tgaPixelBody : Stmt :=
   (.seq (.set 19 (.var 14))
   (.seq (.set 20 (.var 15))
   (.seq (.ite tgaRawCond tgaRawRead .skip)
-  (.seq tgaDstCompute
-  (.seq tgaCall
+  (tgaDstFrame (.seq tgaCall
   (.seq tgaWrCheck tgaPixelInc)))))))
 
 end NANO.C.Proofs
@@ -514,7 +515,7 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
   have l19_4 : s4.locals 19 = some (.int u8 b2) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
   have l20_4 : s4.locals 20 = some (.int u8 b3) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
   have m4 : s4.mem = s.mem := rfl
-  obtain ⟨s5, hdst, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
+  obtain ⟨s5, hframe, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
     ni_tga_dst_compute s4 h p info (by rw [m4]; exact hinfo) h32 l2_4 l6_4 l8_4
       (by rw [m4]; exact hl16) (by rw [m4]; exact hl20) (by rw [m4]; exact hl26) (by rw [m4]; exact hl27)
       hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
@@ -547,7 +548,7 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
   have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
   refine ⟨s7, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- compose
-    exact ExS.seq e17 (ExS.seq e18 (ExS.seq e19 (ExS.seq e20 (ExS.seq hskip (ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)))))))
+    exact ExS.seq e17 (ExS.seq e18 (ExS.seq e19 (ExS.seq e20 (ExS.seq hskip (hframe (.seq tgaCall (.seq tgaWrCheck tgaPixelInc)) .normal s7 (ExS.seq hcall (ExS.seq hwr hinc)))))))
   · show s7.locals 6 = some (.int u64 (p + 1))
     simp [s7, Locals.upd_same]
   · show s7.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length))
@@ -610,14 +611,14 @@ theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl 
     (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
     (hr0 : r0v < 256) (hr1 : r1v < 256) (hr2 : r2v < 256) (hr3 : r3v < 256)
     (hwb : tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length ≤ obl.length) :
-    ∃ s', ExS Gen.prog s (.seq tgaDstCompute (.seq tgaCall (.seq tgaWrCheck tgaPixelInc))) .normal s' ∧
+    ∃ s', ExS Gen.prog s (tgaDstFrame (.seq tgaCall (.seq tgaWrCheck tgaPixelInc))) .normal s' ∧
       s'.locals 6 = some (.int u64 (p + 1)) ∧
       s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length)) ∧
       s'.mem 3 = some info ∧
       (∀ j, j ≠ 6 → j ≠ 26 → j ≠ 21 → j ≠ 22 → j ≠ 23 → j ≠ 24 → j ≠ 25 → s'.locals j = s.locals j) ∧
       s'.ro = s.ro ∧
       (∀ j, j ≠ ob → s'.mem j = s.mem j) := by
-  obtain ⟨s5, hdst, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
+  obtain ⟨s5, hframe, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
     ni_tga_dst_compute s h p info hinfo h32 l2 l6 l8 hl16 hl20 hl26 hl27
       hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
   have l3_5 : s5.locals 3 = some (.ptr ob 0) := by rw [h3d]; exact l3
@@ -646,7 +647,7 @@ theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl 
     EvE.cast (EvE.bin e6 e1 (bin_u64_add p 1 hp1)) (u64_u64_cast (p + 1) hp1)
   let s7 : State := { s6 with locals := s6.locals.upd 6 (.int u64 (p + 1)) }
   have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
-  refine ⟨s7, ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)), ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨s7, hframe (.seq tgaCall (.seq tgaWrCheck tgaPixelInc)) .normal s7 (ExS.seq hcall (ExS.seq hwr hinc)), ?_, ?_, ?_, ?_, ?_, ?_⟩
   · show s7.locals 6 = some (.int u64 (p + 1))
     simp [s7, Locals.upd_same]
   · show s7.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length))
@@ -812,7 +813,7 @@ namespace NANO.C.Proofs
 open NANO NANO.C
 
 abbrev tgaStep16 : Stmt :=
-  .set 16 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.cast u64 (.cast u64 (.const (.int u32 1))))))
+  .set 16 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.const (.int u64 1))))
 
 /-- The decode inner loop (`ni_tga_decode_into_loop0`). -/
 abbrev tgaLoop0 : Stmt :=
@@ -878,9 +879,9 @@ theorem ni_tga_loop0_step_rle (st : State) (h : TgaInfo) (p0 count ob : Nat) (ob
   have h16_1 : st1.locals 16 = some (.int u64 i) := by
     rw [hpres 16 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h16
   have hp1 : i + 1 < 2 ^ 64 := by omega
-  have e16 : EvE Gen.prog st1 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.cast u64 (.cast u64 (.const (.int u32 1)))))) (.int u64 (i + 1)) :=
+  have e16 : EvE Gen.prog st1 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.const (.int u64 1)))) (.int u64 (i + 1)) :=
     EvE.cast (EvE.bin (EvE.cast (EvE.var h16_1) (u64_u64_cast i (by omega)))
-      (EvE.cast (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (u64_u64_cast 1 (by omega)))
+      (EvE.const (v := .int u64 1))
       (bin_u64_add i 1 hp1)) (u64_u64_cast (i + 1) hp1)
   let st2 : State := { st1 with locals := st1.locals.upd 16 (.int u64 (i + 1)) }
   have hstep16 : ExS Gen.prog st1 tgaStep16 .normal st2 := ExS.set e16
@@ -1036,9 +1037,9 @@ theorem ni_tga_loop0_step_raw (st : State) (h : TgaInfo) (p0 count ob bd : Nat) 
   have h16_1 : st1.locals 16 = some (.int u64 i) := by
     rw [hpres 16 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h16
   have hp1 : i + 1 < 2 ^ 64 := by omega
-  have e16 : EvE Gen.prog st1 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.cast u64 (.cast u64 (.const (.int u32 1)))))) (.int u64 (i + 1)) :=
+  have e16 : EvE Gen.prog st1 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.const (.int u64 1)))) (.int u64 (i + 1)) :=
     EvE.cast (EvE.bin (EvE.cast (EvE.var h16_1) (u64_u64_cast i (by omega)))
-      (EvE.cast (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (u64_u64_cast 1 (by omega)))
+      (EvE.const (v := .int u64 1))
       (bin_u64_add i 1 hp1)) (u64_u64_cast (i + 1) hp1)
   let st2 : State := { st1 with locals := st1.locals.upd 16 (.int u64 (i + 1)) }
   have hstep16 : ExS Gen.prog st1 tgaStep16 .normal st2 := ExS.set e16
@@ -1144,5 +1145,42 @@ open NANO NANO.C
 
 /-- The decode packet loop (`ni_tga_decode_into_loop1`). -/
 abbrev tgaLoop1 : Stmt := Gen.ni_tga_decode_into_loop1
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+abbrev tgaL1Hdr : Stmt :=
+  .seq (.ite (.bin .ge (some u64) (.var 7) (.var 1)) (.ret (some (.const (.int i32 8)))) .skip)
+  (.seq (.set 11 (.load (.int u8) (.index (.var 0) (.var 7) 1)))
+  (.seq (.set 7 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 7)) (.cast u64 (.cast u64 (.const (.int u32 1)))))))
+        (.set 10 (.bin .add (some u64) (.cast u64 (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 127)))) (.cast u64 (.const (.int u32 1)))))))
+
+abbrev tgaL1Bytes : Stmt :=
+  .seq (.ite (.bin .gt (some u64) (.bin .add (some u64) (.var 7) (.cast u64 (.var 8))) (.var 1)) (.ret (some (.const (.int i32 10)))) .skip)
+  (.seq (.set 12 (.load (.int u8) (.index (.var 0) (.var 7) 1)))
+  (.seq (.ite (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 1))) (.set 13 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 1)))) 1))) .skip)
+  (.seq (.ite (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 2))) (.set 14 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 2)))) 1))) .skip)
+  (.seq (.ite (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 3))) (.set 15 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 3)))) 1))) .skip)
+        (.set 7 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 7)) (.cast u64 (.cast u64 (.var 8))))))))))
+
+abbrev tgaL1Chk : Stmt :=
+  .ite (.bin .gt (some u64) (.var 10) (.bin .sub (some u64) (.var 5) (.var 6))) (.ret (some (.const (.int i32 9)))) .skip
+
+abbrev tgaL1Big : Stmt :=
+  .seq (.set 10 (.cast u64 (.const (.int u32 1))))
+  (.seq (.set 11 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 12 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 13 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 14 (.cast u8 (.const (.int u32 0))))
+  (.seq (.set 15 (.cast u8 (.const (.int u32 255))))
+  (.seq (.ite (.bin .ne (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) tgaL1Hdr .skip)
+  (.seq tgaL1Chk
+  (.seq (.ite (.lor (.bin .eq (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 128))) (.const (.int u32 0)))) tgaL1Bytes .skip)
+  (.seq (.set 16 (.cast u64 (.const (.int u32 0)))) tgaLoop0)))))))))
+
+abbrev tgaL1Body : Stmt :=
+  .ite (.bin .lt (some u64) (.var 6) (.var 5)) tgaL1Big .brk
 
 end NANO.C.Proofs
