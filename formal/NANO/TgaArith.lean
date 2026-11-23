@@ -21,4 +21,16 @@ theorem bin_u32_add' (n k : Nat) (h : n + k < 2 ^ 32) :
       = .ok (.int ⟨32, false⟩ (n + k)) := by
   simp [evalBin, evalBinInt, binInt, intOf, IntTy.modulus, isPtr, h, Nat.mod_eq_of_lt h]
 
+theorem u64_u64_cast (n : Nat) (h : n < 2 ^ 64) :
+    evalCast ⟨64, false⟩ (.int ⟨64, false⟩ n) = .ok (.int ⟨64, false⟩ n) := by
+  simp [evalCast, IntTy.modulus, Nat.mod_eq_of_lt h]
+
+theorem Locals.upd_of_eq (l : Locals) (i : Nat) (v : Val) (h : l i = some v) :
+    l.upd i v = l := by
+  funext j
+  rw [Locals.upd]
+  by_cases hj : j = i
+  · rw [if_pos hj, hj]; exact h.symm
+  · rw [if_neg hj]
+
 end NANO.C.Proofs
