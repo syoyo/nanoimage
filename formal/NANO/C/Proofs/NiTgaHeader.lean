@@ -199,3 +199,84 @@ theorem tgaHeaderBlock_stores (obl : List UInt8)
   exact e8
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- Preamble of `ni_tga_header`: size gate (false), then load bytes 0/1/2/16/17
+    and read u16le width/height at 12/14. -/
+theorem tgaHeader_loads (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some d)
+    (size : Nat) (hs : size ≤ d.length) (hlen : d.length < 2 ^ 64) (ro : Bool) (hro : ro = false)
+    (hsz : ¬ size < 18) :
+    ∃ s7, ExS Gen.prog ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
+      (.seq (.ite (.bin .lt (some u64) (.var 1) (.cast u64 (.const (.int u32 18)))) (.ret (some (.const (.int i32 1)))) .skip) (.seq (.set 3 (.load (.int u8) (.index (.var 0) (.const (.int i32 0)) 1))) (.seq (.set 4 (.load (.int u8) (.index (.var 0) (.const (.int i32 1)) 1))) (.seq (.set 5 (.load (.int u8) (.index (.var 0) (.const (.int i32 2)) 1))) (.seq (.call (some 6) 0 [(.index (.var 0) (.const (.int i32 12)) 1)]) (.seq (.call (some 7) 0 [(.index (.var 0) (.const (.int i32 14)) 1)]) (.seq (.set 8 (.load (.int u8) (.index (.var 0) (.const (.int i32 16)) 1))) (.set 9 (.load (.int u8) (.index (.var 0) (.const (.int i32 17)) 1))))))))))
+      .normal s7 ∧
+      s7.locals 0 = some (.ptr bd 0) ∧
+      s7.locals 1 = some (.int u64 size) ∧
+      s7.locals 2 = some (.ptr 3 0) ∧
+      s7.locals 3 = some (.int u8 (byteAt d 0)) ∧
+      s7.locals 4 = some (.int u8 (byteAt d 1)) ∧
+      s7.locals 5 = some (.int u8 (byteAt d 2)) ∧
+      s7.locals 6 = some (.int u16 (rd16le d 12)) ∧
+      s7.locals 7 = some (.int u16 (rd16le d 14)) ∧
+      s7.locals 8 = some (.int u8 (byteAt d 16)) ∧
+      s7.locals 9 = some (.int u8 (byteAt d 17)) ∧
+      s7.mem = m := by
+  have hd18 : 18 ≤ d.length := by omega
+  have htb : truthy (boolVal false) = .ok false := truthy_boolVal false
+  let s0 : State := ⟨frameLocals [0, 1, 2] [.ptr bd 0, .int u64 size, .ptr 3 0], m, ro⟩
+  -- size gate (false)
+  have hcast : evalCast u64 (.int u32 18) = .ok (.int u64 18) := u32_u64_cast 18 (by omega)
+  have hlt : EvE Gen.prog s0 (.bin .lt (some u64) (.var 1) (.cast u64 (.const (.int u32 18))))
+      (boolVal (decide (size < 18))) :=
+    EvE.bin (EvE.var rfl) (EvE.cast (EvE.const _) hcast) (bin_u64_lt size 18)
+  have hltf : EvE Gen.prog s0 (.bin .lt (some u64) (.var 1) (.cast u64 (.const (.int u32 18)))) (boolVal false) := by
+    rw [show decide (size < 18) = false from decide_eq_false_iff_not.mpr hsz] at hlt; exact hlt
+  have hgate0 : ExS Gen.prog s0 (.ite (.bin .lt (some u64) (.var 1) (.cast u64 (.const (.int u32 18)))) (.ret (some (.const (.int i32 1)))) .skip) .normal s0 :=
+    ExS.ite hltf htb ExS.skip
+  -- byte loads
+  have load3 : ExS Gen.prog s0 (.set 3 (.load (.int u8) (.index (.var 0) (.const (.int i32 0)) 1))) .normal
+      {s0 with locals := s0.locals.upd 3 (.int u8 (byteAt d 0))} :=
+    ExS.set (EvE.load (ev_ptr_const (s := s0) (d := d) (k := 0) hm rfl (by omega) (by omega))
+      (load_byte_dyn m bd d hm 0 (by omega)))
+  let s3 : State := { locals := s0.locals.upd 3 (.int u8 (byteAt d 0)), mem := m, ro := ro }
+  have load4 : ExS Gen.prog s3 (.set 4 (.load (.int u8) (.index (.var 0) (.const (.int i32 1)) 1))) .normal
+      {s3 with locals := s3.locals.upd 4 (.int u8 (byteAt d 1))} :=
+    ExS.set (EvE.load (ev_ptr_const (s := s3) (d := d) (k := 1) hm (by rfl) (by omega) (by omega))
+      (load_byte_dyn m bd d hm 1 (by omega)))
+  let s4 : State := { locals := s3.locals.upd 4 (.int u8 (byteAt d 1)), mem := m, ro := ro }
+  have load5 : ExS Gen.prog s4 (.set 5 (.load (.int u8) (.index (.var 0) (.const (.int i32 2)) 1))) .normal
+      {s4 with locals := s4.locals.upd 5 (.int u8 (byteAt d 2))} :=
+    ExS.set (EvE.load (ev_ptr_const (s := s4) (d := d) (k := 2) hm (by rfl) (by omega) (by omega))
+      (load_byte_dyn m bd d hm 2 (by omega)))
+  let s5 : State := { locals := s4.locals.upd 5 (.int u8 (byteAt d 2)), mem := m, ro := ro }
+  -- u16le reads
+  have call6 : ExS Gen.prog s5 (.call (some 6) 0 [(.index (.var 0) (.const (.int i32 12)) 1)]) .normal
+      {s5 with locals := s5.locals.upd 6 (.int u16 (rd16le d 12))} :=
+    ExS.call_dst (s' := ⟨frameLocals [0] [.ptr bd 12], m, ro⟩) (EvArgs.cons (ev_ptr_const (s := s5) (d := d) (k := 12) hm (by rfl) (by omega) (by omega)) EvArgs.nil)
+      (show Gen.prog 0 = some Gen.ni_read_u16le from rfl)
+      (show Gen.ni_read_u16le.params.length = 1 from rfl)
+      (ni_read_u16le_exs m bd d hm 12 (by omega) hlen ro)
+  let s6 : State := { locals := s5.locals.upd 6 (.int u16 (rd16le d 12)), mem := m, ro := ro }
+  have call7 : ExS Gen.prog s6 (.call (some 7) 0 [(.index (.var 0) (.const (.int i32 14)) 1)]) .normal
+      {s6 with locals := s6.locals.upd 7 (.int u16 (rd16le d 14))} :=
+    ExS.call_dst (s' := ⟨frameLocals [0] [.ptr bd 14], m, ro⟩) (EvArgs.cons (ev_ptr_const (s := s6) (d := d) (k := 14) hm (by rfl) (by omega) (by omega)) EvArgs.nil)
+      (show Gen.prog 0 = some Gen.ni_read_u16le from rfl)
+      (show Gen.ni_read_u16le.params.length = 1 from rfl)
+      (ni_read_u16le_exs m bd d hm 14 (by omega) hlen ro)
+  let s7a : State := { locals := s6.locals.upd 7 (.int u16 (rd16le d 14)), mem := m, ro := ro }
+  have load8 : ExS Gen.prog s7a (.set 8 (.load (.int u8) (.index (.var 0) (.const (.int i32 16)) 1))) .normal
+      {s7a with locals := s7a.locals.upd 8 (.int u8 (byteAt d 16))} :=
+    ExS.set (EvE.load (ev_ptr_const (s := s7a) (d := d) (k := 16) hm (by rfl) (by omega) (by omega))
+      (load_byte_dyn m bd d hm 16 (by omega)))
+  let s7b : State := { locals := s7a.locals.upd 8 (.int u8 (byteAt d 16)), mem := m, ro := ro }
+  have load9 : ExS Gen.prog s7b (.set 9 (.load (.int u8) (.index (.var 0) (.const (.int i32 17)) 1))) .normal
+      {s7b with locals := s7b.locals.upd 9 (.int u8 (byteAt d 17))} :=
+    ExS.set (EvE.load (ev_ptr_const (s := s7b) (d := d) (k := 17) hm (by rfl) (by omega) (by omega))
+      (load_byte_dyn m bd d hm 17 (by omega)))
+  let s7 : State := { locals := s7b.locals.upd 9 (.int u8 (byteAt d 17)), mem := m, ro := ro }
+  refine ⟨s7, ?_, by rfl, by rfl, by rfl, by rfl, by rfl, by rfl, by rfl, by rfl, by rfl, by rfl, by rfl⟩
+  exact ExS.seq hgate0 (ExS.seq load3 (ExS.seq load4 (ExS.seq load5
+    (ExS.seq call6 (ExS.seq call7 (ExS.seq load8 load9))))))
+
+end NANO.C.Proofs
