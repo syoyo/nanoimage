@@ -152,3 +152,46 @@ theorem tgaCode_ok4 (d : List UInt8) (size : Nat) (hsz : ¬ size < 18)
   unfold tgaHeaderCode; rw [tgaHeader_ok4 d size hsz hdim hcm hvalid hchan hpd hid hm1 hm2]
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem tgaHeader_depth1 (d : List UInt8) (size : Nat) (hsz : ¬ size < 18)
+    (hdim : ¬ (rd16le d 12 = 0 ∨ rd16le d 14 = 0)) (hcm : byteAt d 1 = 0)
+    (hvalid : ¬ (¬ byteAt d 2 = 2 ∧ ¬ byteAt d 2 = 3 ∧ ¬ byteAt d 2 = 10 ∧ ¬ byteAt d 2 = 11))
+    (hchan : byteAt d 2 = 3 ∨ byteAt d 2 = 11) (hpd : byteAt d 16 ≠ 8) :
+    tgaHeader size d = .error 5 := by
+  unfold tgaHeader
+  simp only [if_neg hsz, if_neg hdim, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+    if_neg hvalid, if_pos hchan, if_pos hpd, Except.bind, Bind.bind, pure, Except.pure, id]
+  rfl
+
+theorem tgaHeader_depth2 (d : List UInt8) (size : Nat) (hsz : ¬ size < 18)
+    (hdim : ¬ (rd16le d 12 = 0 ∨ rd16le d 14 = 0)) (hcm : byteAt d 1 = 0)
+    (hvalid : ¬ (¬ byteAt d 2 = 2 ∧ ¬ byteAt d 2 = 3 ∧ ¬ byteAt d 2 = 10 ∧ ¬ byteAt d 2 = 11))
+    (hchan : ¬ (byteAt d 2 = 3 ∨ byteAt d 2 = 11))
+    (hpd24 : byteAt d 16 ≠ 24) (hpd32 : byteAt d 16 ≠ 32) :
+    tgaHeader size d = .error 5 := by
+  unfold tgaHeader
+  simp only [if_neg hsz, if_neg hdim, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+    if_neg hvalid, if_neg hchan,
+    if_neg (by simp [hpd24] : ¬ (byteAt d 16 = 24)),
+    if_neg (by simp [hpd32] : ¬ (byteAt d 16 = 32)),
+    Except.bind, Bind.bind, pure, Except.pure, id]
+  rfl
+
+theorem tgaCode_depth1 (d : List UInt8) (size : Nat) (hsz : ¬ size < 18)
+    (hdim : ¬ (rd16le d 12 = 0 ∨ rd16le d 14 = 0)) (hcm : byteAt d 1 = 0)
+    (hvalid : ¬ (¬ byteAt d 2 = 2 ∧ ¬ byteAt d 2 = 3 ∧ ¬ byteAt d 2 = 10 ∧ ¬ byteAt d 2 = 11))
+    (hchan : byteAt d 2 = 3 ∨ byteAt d 2 = 11) (hpd : byteAt d 16 ≠ 8) :
+    tgaHeaderCode size d = 5 := by
+  unfold tgaHeaderCode; rw [tgaHeader_depth1 d size hsz hdim hcm hvalid hchan hpd]
+theorem tgaCode_depth2 (d : List UInt8) (size : Nat) (hsz : ¬ size < 18)
+    (hdim : ¬ (rd16le d 12 = 0 ∨ rd16le d 14 = 0)) (hcm : byteAt d 1 = 0)
+    (hvalid : ¬ (¬ byteAt d 2 = 2 ∧ ¬ byteAt d 2 = 3 ∧ ¬ byteAt d 2 = 10 ∧ ¬ byteAt d 2 = 11))
+    (hchan : ¬ (byteAt d 2 = 3 ∨ byteAt d 2 = 11))
+    (hpd24 : byteAt d 16 ≠ 24) (hpd32 : byteAt d 16 ≠ 32) :
+    tgaHeaderCode size d = 5 := by
+  unfold tgaHeaderCode; rw [tgaHeader_depth2 d size hsz hdim hcm hvalid hchan hpd24 hpd32]
+
+end NANO.C.Proofs
