@@ -1446,4 +1446,72 @@ theorem ni_tga_l1set (s : State) :
   · show s6.locals 15 = some (.int u8 255); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
   · show s6.mem = s.mem; simp [s6, s5, s4, s3, s2, s1]
 
+
+def tgaL1PreRle0Post (s : State) (dat : List UInt8) (off ch : Nat) : State :=
+  { s with locals :=
+      s.locals.upd 10 (.int u64 1) |>.upd 11 (.int u8 0) |>.upd 12 (.int u8 0)
+        |>.upd 13 (.int u8 0) |>.upd 14 (.int u8 0) |>.upd 15 (.int u8 255)
+        |>.upd 12 (.int u8 (byteAt dat off))
+        |>.upd 13 (if 1 < ch then .int u8 (byteAt dat (off + 1)) else .int u8 0)
+        |>.upd 14 (if 2 < ch then .int u8 (byteAt dat (off + 2)) else .int u8 0)
+        |>.upd 15 (if 3 < ch then .int u8 (byteAt dat (off + 3)) else .int u8 255)
+        |>.upd 7 (.int u64 (off + ch)) }
+
+theorem ni_tga_l1pre_rle0 (s : State) (bd : Nat) (dat : List UInt8) (hm : s.mem bd = some dat)
+    (l0 : s.locals 0 = some (.ptr bd 0)) (l1 : s.locals 1 = some (.int u64 dat.length))
+    (off ch npx pidx : Nat) (l5 : s.locals 5 = some (.int u64 npx)) (l6 : s.locals 6 = some (.int u64 pidx))
+    (l7 : s.locals 7 = some (.int u64 off)) (l8 : s.locals 8 = some (.int u8 ch))
+    (l9 : s.locals 9 = some (.int u8 0))
+    (hch : ch < 256) (hcp : 0 < ch) (hdat64 : dat.length < 2 ^ 64)
+    (hle : pidx ≤ npx) (hleft : 1 ≤ npx - pidx) (hb : off + ch ≤ dat.length) (h64 : off + ch < 2 ^ 64)
+    (hro : s.ro = false)
+    (cont : Stmt) (o : Outcome) (s' : State)
+    (hcont : ExS Gen.prog (tgaL1PreRle0Post s dat off ch) cont o s') :
+    ExS Gen.prog s (tgaL1PreFrame cont) o s' := by
+  let s1 : State := { s with locals := s.locals.upd 10 (.int u64 1) }
+  have e10 : ExS Gen.prog s (.set 10 (.cast u64 (.const (.int u32 1)))) .normal s1 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega)))
+  let s2 : State := { s1 with locals := s1.locals.upd 11 (.int u8 0) }
+  have e11 : ExS Gen.prog s1 (.set 11 (.cast u8 (.const (.int u32 0)))) .normal s2 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s3 : State := { s2 with locals := s2.locals.upd 12 (.int u8 0) }
+  have e12 : ExS Gen.prog s2 (.set 12 (.cast u8 (.const (.int u32 0)))) .normal s3 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s4 : State := { s3 with locals := s3.locals.upd 13 (.int u8 0) }
+  have e13 : ExS Gen.prog s3 (.set 13 (.cast u8 (.const (.int u32 0)))) .normal s4 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s5 : State := { s4 with locals := s4.locals.upd 14 (.int u8 0) }
+  have e14 : ExS Gen.prog s4 (.set 14 (.cast u8 (.const (.int u32 0)))) .normal s5 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s6 : State := { s5 with locals := s5.locals.upd 15 (.int u8 255) }
+  have e15 : ExS Gen.prog s5 (.set 15 (.cast u8 (.const (.int u32 255)))) .normal s6 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 255)) (u32_u8_cast 255 (by omega)))
+  have l9_6 : s6.locals 9 = some (.int u8 0) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l9]
+  have hne : EvE Gen.prog s6 (.bin .ne (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (boolVal false) :=
+    EvE.bin (EvE.cast (EvE.var l9_6) (u8_u32_cast 0 (by omega))) (EvE.const (v := .int u32 0)) (bin_u32_ne 0 0)
+  have hiterle : ExS Gen.prog s6 (.ite (.bin .ne (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) tgaL1Hdr .skip) .normal s6 :=
+    ExS.ite (bc := false) hne (by simp [truthy_boolVal]) ExS.skip
+  have l10_6 : s6.locals 10 = some (.int u64 1) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  have l5_6 : s6.locals 5 = some (.int u64 npx) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l5]
+  have l6_6 : s6.locals 6 = some (.int u64 pidx) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l6]
+  have hchk : ExS Gen.prog s6 tgaL1Chk .normal s6 :=
+    ni_tga_l1chk_ok s6 1 npx pidx l10_6 l5_6 l6_6 hle hleft (by simp [s6, s5, s4, s3, s2, s1]; exact hro)
+  have l7_6 : s6.locals 7 = some (.int u64 off) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l7]
+  have l8_6 : s6.locals 8 = some (.int u8 ch) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l8]
+  have l0_6 : s6.locals 0 = some (.ptr bd 0) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l0]
+  have l1_6 : s6.locals 1 = some (.int u64 dat.length) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, l1]
+  have l13_6 : s6.locals 13 = some (.int u8 0) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  have l14_6 : s6.locals 14 = some (.int u8 0) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  have l15_6 : s6.locals 15 = some (.int u8 255) := by simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  have hm6 : s6.mem = s.mem := by simp [s6, s5, s4, s3, s2, s1]
+  have hbytes := ni_tga_l1bytes_ok s6 bd dat (by rw [hm6]; exact hm) l0_6 l1_6 off ch 0 0 255 l7_6 l8_6 l13_6 l14_6 l15_6 hch hcp hb h64
+  have heq0 : EvE Gen.prog s6 (.bin .eq (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (boolVal true) :=
+    EvE.bin (EvE.cast (EvE.var l9_6) (u8_u32_cast 0 (by omega))) (EvE.const (v := .int u32 0)) (bin_u32_eq 0 0)
+  have hlor : EvE Gen.prog s6 (.lor (.bin .eq (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 128))) (.const (.int u32 0)))) (boolVal true) :=
+    EvE.lor_true heq0 (by simp [truthy_boolVal])
+  have hiteraw : ExS Gen.prog s6 (.ite (.lor (.bin .eq (some u32) (.cast u32 (.var 9)) (.const (.int u32 0))) (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 128))) (.const (.int u32 0)))) tgaL1Bytes .skip) .normal (tgaL1PreRle0Post s dat off ch) := by
+    refine ExS.ite (bc := true) hlor (by simp [truthy_boolVal]) ?_
+    exact hbytes
+  exact ExS.seq e10 (ExS.seq e11 (ExS.seq e12 (ExS.seq e13 (ExS.seq e14 (ExS.seq e15 (ExS.seq hiterle (ExS.seq hchk (ExS.seq hiteraw hcont))))))))
+
 end NANO.C.Proofs
