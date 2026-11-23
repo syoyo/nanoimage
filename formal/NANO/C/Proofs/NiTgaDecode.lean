@@ -8,6 +8,7 @@ import NANO.C.Lemmas
 import NANO.Spec
 import NANO.Tga
 import NANO.TgaWrites
+import NANO.TgaSpec
 import NANO.TgaGeometry
 import NANO.C.Proofs.Core
 import NANO.C.Proofs.NiGeometryTail
@@ -2095,4 +2096,39 @@ theorem ni_tga_l1step_raw_pkt (s : State) (h : TgaInfo) (npx ob bd : Nat) (obl i
   refine ⟨a5, a6, a7, a8, a9, a0, a1, a2, a3, ?_, ainfo, amdat, aro, ?_⟩
   · simp only [offb, count] at amob ⊢; exact amob
   · simp only [count] at *; omega
+theorem ni_tga_loop1_rle_ok (st0 : State) (h : TgaInfo) (ob bd : Nat) (obl info dat : List UInt8)
+    (hinv : TgaL1Inv st0 h (h.width * h.height) ob bd obl info dat 0 h.dataOffset)
+    (hobl : obl = tgaMaterialize h.outputSize [])
+    (hrle0 : h.rle = 0)
+    (hch : h.channels < 256) (hcp : 0 < h.channels) (hdat64 : dat.length < 2 ^ 64) (hob3 : ob ≠ 3) (hbd3 : bd ≠ 3) (hbdo : bd ≠ ob)
+    (hlob : obl.length < 2 ^ 64) (h32 : info.length = 32) (hcount64 : h.width * h.height < 2 ^ 64)
+    (hl16 : load st0.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load st0.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load st0.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load st0.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hbnd : ∀ q, q < h.width * h.height → TgaPixelBounds h q)
+    (hwbf : ∀ q, q < h.width * h.height → tgaDstIndex h q + h.channels ≤ obl.length)
+    (hdbnd : ∀ i, i < h.width * h.height → h.dataOffset + i * h.channels + h.channels ≤ dat.length)
+    (hdob : ∀ i, i < h.width * h.height → h.dataOffset + i * h.channels + h.channels < 2 ^ 64)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    ∃ st' ws, tgaWritesAux dat h (h.width * h.height) (h.width * h.height) h.dataOffset [] = Except.ok ws ∧
+      ExS Gen.prog st0 tgaLoop1 .normal st' ∧
+      st'.mem ob = some (tgaMaterialize h.outputSize ws) := by
+  obtain ⟨st', hrun, hinv'⟩ :=
+    ni_tga_loop1_rle st0 h (h.width * h.height) ob bd obl info dat 0 h.dataOffset hinv (by omega) hrle0
+      hch hcp hdat64 hob3 hbd3 hbdo hlob h32 hcount64 hl16 hl20 hl26 hl27 hw32 hh32 hwpos hhpos hro8 hto8 hwh64
+      hbnd hwbf (fun i hi => by simpa using hdbnd i hi) (fun i hi => by simpa using hdob i hi) hc
+  -- the spec walk from d = W*H
+  have hwalk := tgaWritesAux_rle0_walk dat h hrle0 (h.width * h.height) []
+    (by omega)
+    (fun i hi => by simpa using hdbnd i hi)
+  simp only [Nat.sub_self, Nat.zero_mul, Nat.add_zero, List.nil_append] at hwalk
+  refine ⟨st', _, hwalk, hrun, ?_⟩
+  obtain ⟨_, _, _, _, _, _, _, _, _, hmem, _, _, _, _⟩ := hinv'
+  rw [show h.width * h.height - 0 = h.width * h.height from by omega] at hmem
+  rw [tgaFoldRaw_eq_materialize dat h 0 h.dataOffset (h.width * h.height) obl hobl] at hmem
+  exact hmem
+
 end NANO.C.Proofs
