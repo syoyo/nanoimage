@@ -40,4 +40,5 @@ import NANO.C.Proofs.NiTgaWritePixel
 import NANO.C.Proofs.NiTgaHeader
 import NANO.C.Proofs.NiTgaHeaderBody
 import NANO.C.Proofs.NiTgaHeaderStores
+import NANO.C.Proofs.NiTgaHeaderGates
 

@@ -328,3 +328,16 @@ theorem bin_u64_mul (a b : Nat) (h : a * b < 2 ^ 64) :
   simp [evalBin, evalBinInt, binInt, intOf, u64, IntTy.modulus, isPtr, ptrEq, Nat.mod_eq_of_lt h]
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- `evalCast` i32→u64 for a small non-negative literal. -/
+theorem i32_u64_cast (k : Nat) (hk : k < 2 ^ 31) : evalCast u64 (.int i32 k) = .ok (.int u64 k) := by
+  simp only [evalCast, i32, u64, IntTy.signed, if_true]
+  simp [IntTy.wrap, IntTy.toInt, IntTy.modulus, IntTy.signed, IntTy.width, u64,
+    show ¬ (2147483648 ≤ k) by omega,
+    Int.emod_eq_of_lt (by omega : (0 : Int) ≤ (k : Int)) (by omega : (k : Int) < 18446744073709551616),
+    Int.toNat_natCast]
+
+end NANO.C.Proofs
