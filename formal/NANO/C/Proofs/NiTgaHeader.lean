@@ -309,3 +309,22 @@ theorem i32_u8_cast (k : Nat) (hk : k < 256) :
     show ¬ (2147483648 ≤ k) by omega, Int.emod_eq_of_lt (by omega : (0 : Int) ≤ (k : Int)) (by omega : (k : Int) < 256), Int.toNat_natCast]
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- `evalCast` u32→u8 truncates; value preserved for bytes. -/
+theorem u32_u8_cast (k : Nat) (hk : k < 256) : evalCast u8 (.int u32 k) = .ok (.int u8 k) := by
+  simp [evalCast, u8, u32, IntTy.modulus, Nat.mod_eq_of_lt hk]
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- Unsigned u64 multiply (non-wrapping). -/
+theorem bin_u64_mul (a b : Nat) (h : a * b < 2 ^ 64) :
+    evalBin .mul (some u64) (.int u64 a) (.int u64 b) = .ok (.int u64 (a * b)) := by
+  simp [evalBin, evalBinInt, binInt, intOf, u64, IntTy.modulus, isPtr, ptrEq, Nat.mod_eq_of_lt h]
+
+end NANO.C.Proofs
