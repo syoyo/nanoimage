@@ -912,7 +912,7 @@ end NANO.C.Proofs
 namespace NANO.C.Proofs
 open NANO NANO.C
 
-def TgaPixelBounds (h : TgaInfo) (p : Nat) : Prop :=
+abbrev TgaPixelBounds (h : TgaInfo) (p : Nat) : Prop :=
   p / h.width < 2 ^ 32 ∧ p < 2 ^ 64 ∧ p < h.width * h.height ∧
   tgaDstY h p * h.width < 2 ^ 64 ∧
   tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64 ∧
@@ -977,5 +977,97 @@ theorem ni_tga_loop0_rle (st0 : State) (h : TgaInfo) (p0 count ob : Nat) (obl in
       obtain ⟨st', hrec, hinv'⟩ := ih st2 (i + 1) hk' hinv2
       exact ⟨st', ExS.loop_next hb (Or.inl rfl) hs hrec, hinv'⟩
   exact aux (count - i0) st0 i0 rfl hinv0
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+def TgaLoopInvRaw (s : State) (h : TgaInfo) (p0 count ob bd : Nat) (obl info dat : List UInt8)
+    (b0 b1 b2 b3 rle hdr off0 i : Nat) : Prop :=
+  s.locals 16 = some (.int u64 i) ∧
+  s.locals 6 = some (.int u64 (p0 + i)) ∧
+  s.locals 7 = some (.int u64 (off0 + i * h.channels)) ∧
+  s.mem ob = some (tgaFoldRaw obl h p0 off0 h.channels dat i) ∧
+  s.mem 3 = some info ∧ s.mem bd = some dat ∧
+  s.locals 0 = some (.ptr bd 0) ∧ s.locals 1 = some (.int u64 dat.length) ∧
+  s.locals 2 = some (.ptr 3 0) ∧ s.locals 3 = some (.ptr ob 0) ∧
+  s.locals 8 = some (.int u8 h.channels) ∧ s.locals 9 = some (.int u8 rle) ∧
+  s.locals 10 = some (.int u64 count) ∧ s.locals 11 = some (.int u8 hdr) ∧
+  s.locals 12 = some (.int u8 b0) ∧ s.locals 13 = some (.int u8 b1) ∧
+  s.locals 14 = some (.int u8 b2) ∧ s.locals 15 = some (.int u8 b3) ∧
+  s.ro = false ∧ i ≤ count
+
+theorem ni_tga_loop0_step_raw (st : State) (h : TgaInfo) (p0 count ob bd : Nat) (obl info dat : List UInt8)
+    (b0 b1 b2 b3 rle hdr off0 i : Nat)
+    (hinv : TgaLoopInvRaw st h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 i)
+    (hi : i < count) (hcount64 : count < 2 ^ 64) (h32 : info.length = 32)
+    (hrawR : rle ≠ 0) (hrawB : (hdr &&& 128) = 0) (hrle8 : rle < 256) (hhdr8 : hdr < 256)
+    (hbd3 : bd ≠ 3) (hbdo : bd ≠ ob) (hdat64 : dat.length < 2 ^ 64)
+    (hl16 : load st.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load st.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load st.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load st.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hch : h.channels < 256) (hchp : 0 < h.channels) (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hwh64 : h.width * h.height < 2 ^ 64)
+    (hbnd : TgaPixelBounds h (p0 + i))
+    (hdbnd : (off0 + i * h.channels) + h.channels ≤ dat.length)
+    (hdob : (off0 + i * h.channels) + h.channels < 2 ^ 64)
+    (hwbf : tgaDstIndex h (p0 + i) + (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + i * h.channels))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 1))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 2))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 3)))).length ≤ obl.length)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
+    (hb0 : b0 < 256) (hb1 : b1 < 256) (hb2 : b2 < 256) (hb3 : b3 < 256)
+    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) :
+    ∃ st1 st2, ExS Gen.prog st (.ite (.bin .lt (some u64) (.var 16) (.var 10)) tgaPixelBody .brk) .normal st1 ∧
+      ExS Gen.prog st1 tgaStep16 .normal st2 ∧
+      TgaLoopInvRaw st2 h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 (i + 1) := by
+  obtain ⟨h16, h6, h7, hobM, hinfo, hmemdat, l0', l1', l2, l3, h8, h9, h10, h11, h12, h13, h14, h15, hro, hle⟩ := hinv
+  have hcond : EvE Gen.prog st (.bin .lt (some u64) (.var 16) (.var 10)) (boolVal true) :=
+    EvE.bin (EvE.var h16) (EvE.var h10) (by rw [bin_u64_lt, decide_eq_true hi])
+  have hfold_lt : (tgaFoldRaw obl h p0 off0 h.channels dat i).length < 2 ^ 64 := by rw [tgaFoldRaw_length]; exact hlob
+  have hwb' : tgaDstIndex h (p0 + i) + (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + i * h.channels))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 1))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 2))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 3)))).length ≤ (tgaFoldRaw obl h p0 off0 h.channels dat i).length := by
+    rw [tgaFoldRaw_length]; exact hwbf
+  obtain ⟨st1, hstep, h6', hob', hinfo', hpres, hro', h7', hmemdat'⟩ :=
+    ni_tga_pixel_step_raw st h (p0 + i) ob bd (tgaFoldRaw obl h p0 off0 h.channels dat i) dat hobM hfold_lt hro hob3 hbd3 hbdo hmemdat
+      info hinfo h32 l0' l1' l2 l3 h6 h8 (off0 + i * h.channels) h7 b0 b1 b2 b3 h12 h13 h14 h15 rle hdr h9 h11
+      ⟨hrawR, hrawB⟩ hrle8 hhdr8 hdbnd hdob hl16 hl20 hl26 hl27 hw32 hh32 hwpos hhpos hbnd.1 hch hchp hro8 hto8 hbnd.2.1 hbnd.2.2.1 hwh64 hbnd.2.2.2.1 hbnd.2.2.2.2.1 hbnd.2.2.2.2.2 hc hb0 hb1 hb2 hb3 hwb'
+  have hbody : ExS Gen.prog st (.ite (.bin .lt (some u64) (.var 16) (.var 10)) tgaPixelBody .brk) .normal st1 :=
+    ExS.ite (b := .brk) (bc := true) hcond (by simp [truthy_boolVal]) hstep
+  have h16_1 : st1.locals 16 = some (.int u64 i) := by
+    rw [hpres 16 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h16
+  have hp1 : i + 1 < 2 ^ 64 := by omega
+  have e16 : EvE Gen.prog st1 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 16)) (.cast u64 (.cast u64 (.const (.int u32 1)))))) (.int u64 (i + 1)) :=
+    EvE.cast (EvE.bin (EvE.cast (EvE.var h16_1) (u64_u64_cast i (by omega)))
+      (EvE.cast (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (u64_u64_cast 1 (by omega)))
+      (bin_u64_add i 1 hp1)) (u64_u64_cast (i + 1) hp1)
+  let st2 : State := { st1 with locals := st1.locals.upd 16 (.int u64 (i + 1)) }
+  have hstep16 : ExS Gen.prog st1 tgaStep16 .normal st2 := ExS.set e16
+  refine ⟨st1, st2, hbody, hstep16, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · show st2.locals 16 = some (.int u64 (i + 1)); simp [st2, Locals.upd_same]
+  · show st2.locals 6 = some (.int u64 (p0 + (i + 1)))
+    rw [show st2.locals 6 = st1.locals 6 from by simp [st2, Locals.upd_ne], h6', show (p0 + i) + 1 = p0 + (i + 1) from by omega]
+  · show st2.locals 7 = some (.int u64 (off0 + (i + 1) * h.channels))
+    rw [show st2.locals 7 = st1.locals 7 from by simp [st2, Locals.upd_ne], h7', show (off0 + i * h.channels) + h.channels = off0 + (i + 1) * h.channels from by rw [Nat.succ_mul, Nat.add_assoc]]
+  · show st2.mem ob = some (tgaFoldRaw obl h p0 off0 h.channels dat (i + 1))
+    rw [show st2.mem = st1.mem from rfl]
+    rw [hob']
+    rw [tgaFoldRaw_succ, tgaWriteAt_eq _ _ _ (by rw [tgaFoldRaw_length]; exact hwbf)]
+  · show st2.mem 3 = some info; rw [show st2.mem = st1.mem from rfl]; exact hinfo'
+  · show st2.mem bd = some dat; rw [show st2.mem = st1.mem from rfl]; exact hmemdat'
+  · show st2.locals 0 = some (.ptr bd 0); rw [show st2.locals 0 = st1.locals 0 from by simp [st2, Locals.upd_ne], hpres 0 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact l0'
+  · show st2.locals 1 = some (.int u64 dat.length); rw [show st2.locals 1 = st1.locals 1 from by simp [st2, Locals.upd_ne], hpres 1 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact l1'
+  · show st2.locals 2 = some (.ptr 3 0); rw [show st2.locals 2 = st1.locals 2 from by simp [st2, Locals.upd_ne], hpres 2 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact l2
+  · show st2.locals 3 = some (.ptr ob 0); rw [show st2.locals 3 = st1.locals 3 from by simp [st2, Locals.upd_ne], hpres 3 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact l3
+  · show st2.locals 8 = some (.int u8 h.channels); rw [show st2.locals 8 = st1.locals 8 from by simp [st2, Locals.upd_ne], hpres 8 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h8
+  · show st2.locals 9 = some (.int u8 rle); rw [show st2.locals 9 = st1.locals 9 from by simp [st2, Locals.upd_ne], hpres 9 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h9
+  · show st2.locals 10 = some (.int u64 count); rw [show st2.locals 10 = st1.locals 10 from by simp [st2, Locals.upd_ne], hpres 10 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h10
+  · show st2.locals 11 = some (.int u8 hdr); rw [show st2.locals 11 = st1.locals 11 from by simp [st2, Locals.upd_ne], hpres 11 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h11
+  · show st2.locals 12 = some (.int u8 b0); rw [show st2.locals 12 = st1.locals 12 from by simp [st2, Locals.upd_ne], hpres 12 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h12
+  · show st2.locals 13 = some (.int u8 b1); rw [show st2.locals 13 = st1.locals 13 from by simp [st2, Locals.upd_ne], hpres 13 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h13
+  · show st2.locals 14 = some (.int u8 b2); rw [show st2.locals 14 = st1.locals 14 from by simp [st2, Locals.upd_ne], hpres 14 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h14
+  · show st2.locals 15 = some (.int u8 b3); rw [show st2.locals 15 = st1.locals 15 from by simp [st2, Locals.upd_ne], hpres 15 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h15
+  · show st2.ro = false; rw [show st2.ro = st1.ro from rfl, hro']; exact hro
+  · show i + 1 ≤ count; omega
 
 end NANO.C.Proofs
