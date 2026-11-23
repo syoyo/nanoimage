@@ -237,3 +237,75 @@ theorem rd16le_lt (d : List UInt8) (o : Nat) : rd16le d o < 65536 := by
   rw [this]; omega
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+private theorem boolVal_true_eq : boolVal true = (.int i32 1 : Val) := rfl
+private theorem boolVal_false_eq : boolVal false = (.int i32 0 : Val) := rfl
+
+/-- rle byte: `(type==10 || type==11)` as u8. -/
+theorem ev_tga_rle (s : State) (b2 : Nat) (l5 : s.locals 5 = some (.int u8 b2)) (hb2 : b2 < 256) :
+    EvE Gen.prog s
+      (.cast u8 (.lor (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 10)))
+                       (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 11)))))
+      (.int u8 (if b2 = 10 ∨ b2 = 11 then 1 else 0)) := by
+  have eq10 : EvE Gen.prog s (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 10))) (boolVal (decide (b2 = 10))) :=
+    EvE.bin (EvE.cast (EvE.var l5) (u8_u32_cast b2 hb2)) (EvE.const _) (bin_u32_eq b2 10)
+  have eq11 : EvE Gen.prog s (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 11))) (boolVal (decide (b2 = 11))) :=
+    EvE.bin (EvE.cast (EvE.var l5) (u8_u32_cast b2 hb2)) (EvE.const _) (bin_u32_eq b2 11)
+  by_cases hp : b2 = 10 ∨ b2 = 11
+  · rw [if_pos hp]
+    have lorEv : EvE Gen.prog s (.lor (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 10)))
+        (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 11)))) (boolVal true) := by
+      rcases hp with h | h
+      · have e := eq10; rw [decide_eq_true_eq.mpr h] at e; exact EvE.lor_true e (truthy_boolVal true)
+      · have e3 := eq10; rw [decide_eq_false_iff_not.mpr (by omega : b2 ≠ 10)] at e3
+        have e := eq11; rw [decide_eq_true_eq.mpr h] at e
+        exact EvE.lor_false e3 (truthy_boolVal false) e (truthy_boolVal true)
+    exact EvE.cast lorEv (by rw [boolVal_true_eq]; exact i32_u8_cast 1 (by omega))
+  · rw [if_neg hp]
+    have h10 : b2 ≠ 10 := fun h => hp (Or.inl h)
+    have h11 : b2 ≠ 11 := fun h => hp (Or.inr h)
+    have lorEv : EvE Gen.prog s (.lor (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 10)))
+        (.bin .eq (some u32) (.cast u32 (.var 5)) (.const (.int u32 11)))) (boolVal false) := by
+      have e3 := eq10; rw [decide_eq_false_iff_not.mpr h10] at e3
+      have e := eq11; rw [decide_eq_false_iff_not.mpr h11] at e
+      exact EvE.lor_false e3 (truthy_boolVal false) e (truthy_boolVal false)
+    exact EvE.cast lorEv (by rw [boolVal_false_eq]; exact i32_u8_cast 0 (by omega))
+
+/-- top-origin byte: `(descriptor & 32) != 0` as u8. -/
+theorem ev_tga_top (s : State) (de : Nat) (l9 : s.locals 9 = some (.int u8 de)) (hde : de < 256) :
+    EvE Gen.prog s
+      (.cast u8 (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 9)) (.const (.int u32 32))) (.const (.int u32 0))))
+      (.int u8 (if de &&& 32 ≠ 0 then 1 else 0)) := by
+  have band : EvE Gen.prog s (.bin .band (some u32) (.cast u32 (.var 9)) (.const (.int u32 32))) (.int u32 (de &&& 32)) :=
+    EvE.bin (EvE.cast (EvE.var l9) (u8_u32_cast de hde)) (EvE.const _) (bin_u32_band de 32)
+  have ne : EvE Gen.prog s (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 9)) (.const (.int u32 32))) (.const (.int u32 0))) (boolVal (decide (de &&& 32 ≠ 0))) :=
+    EvE.bin band (EvE.const _) (bin_u32_ne (de &&& 32) 0)
+  by_cases hp : de &&& 32 ≠ 0
+  · rw [if_pos hp]
+    have e := ne; rw [decide_eq_true_eq.mpr hp] at e
+    exact EvE.cast e (by rw [boolVal_true_eq]; exact i32_u8_cast 1 (by omega))
+  · rw [if_neg hp]
+    have e := ne; rw [decide_eq_false_iff_not.mpr hp] at e
+    exact EvE.cast e (by rw [boolVal_false_eq]; exact i32_u8_cast 0 (by omega))
+
+/-- right-origin byte: `(descriptor & 16) != 0` as u8. -/
+theorem ev_tga_right (s : State) (de : Nat) (l9 : s.locals 9 = some (.int u8 de)) (hde : de < 256) :
+    EvE Gen.prog s
+      (.cast u8 (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 9)) (.const (.int u32 16))) (.const (.int u32 0))))
+      (.int u8 (if de &&& 16 ≠ 0 then 1 else 0)) := by
+  have band : EvE Gen.prog s (.bin .band (some u32) (.cast u32 (.var 9)) (.const (.int u32 16))) (.int u32 (de &&& 16)) :=
+    EvE.bin (EvE.cast (EvE.var l9) (u8_u32_cast de hde)) (EvE.const _) (bin_u32_band de 16)
+  have ne : EvE Gen.prog s (.bin .ne (some u32) (.bin .band (some u32) (.cast u32 (.var 9)) (.const (.int u32 16))) (.const (.int u32 0))) (boolVal (decide (de &&& 16 ≠ 0))) :=
+    EvE.bin band (EvE.const _) (bin_u32_ne (de &&& 16) 0)
+  by_cases hp : de &&& 16 ≠ 0
+  · rw [if_pos hp]
+    have e := ne; rw [decide_eq_true_eq.mpr hp] at e
+    exact EvE.cast e (by rw [boolVal_true_eq]; exact i32_u8_cast 1 (by omega))
+  · rw [if_neg hp]
+    have e := ne; rw [decide_eq_false_iff_not.mpr hp] at e
+    exact EvE.cast e (by rw [boolVal_false_eq]; exact i32_u8_cast 0 (by omega))
+
+end NANO.C.Proofs
