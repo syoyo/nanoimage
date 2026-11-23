@@ -260,4 +260,24 @@ theorem foldlM_raw_cont (n o ch : Nat) (dat : List UInt8) (w : Nat → Nat → T
   rw [foldlM_raw_safe _ _ _ dat _ acc hb]
   rfl
 
+theorem ofNat_byteAt (d : List UInt8) (o : Nat) : UInt8.ofNat (byteAt d o) = d.getD o 0 := by
+  unfold byteAt; simp
+
+/-- The machine's raw pixel fold from an empty materialised buffer equals the
+    materialisation of the spec's ordered pixel writes. -/
+theorem tgaFoldRaw_eq_materialize (dat : List UInt8) (h : TgaInfo) (p0 off0 n : Nat) (obl : List UInt8)
+    (hobl : obl = tgaMaterialize h.outputSize []) :
+    tgaFoldRaw obl h p0 off0 h.channels dat n
+      = tgaMaterialize h.outputSize ((List.range n).map (fun i =>
+          (tgaDstIndex h (p0 + i),
+           tgaPixelOut h.channels (dat.getD (off0 + i * h.channels) 0)
+             (dat.getD (off0 + i * h.channels + 1) 0)
+             (dat.getD (off0 + i * h.channels + 2) 0)
+             (dat.getD (off0 + i * h.channels + 3) 0)))) := by
+  rw [hobl, ← tgaMaterialize_raw h.outputSize p0 off0 h.channels h [] dat n, List.nil_append]
+  congr 1
+  apply List.map_congr_left
+  intro i hi
+  simp only [ofNat_byteAt]
+
 end NANO
