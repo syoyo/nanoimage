@@ -36,4 +36,11 @@ theorem Locals.upd_of_eq (l : Locals) (i : Nat) (v : Val) (h : l i = some v) :
 theorem bin_u32_gt (n k : Nat) : evalBin .gt (some ⟨32, false⟩) (.int ⟨32, false⟩ n) (.int ⟨32, false⟩ k)
     = .ok (boolVal (decide (n > k))) := rfl
 
+/-- Loading from a pointer block depends only on that block's contents. -/
+theorem load_ptr_congr (m m' : Mem) (b o : Nat) (ty : Ty) (h : m b = m' b) :
+    load m ty (.ptr b o) = load m' ty (.ptr b o) := by
+  simp only [load]
+  rw [show readBytes m b o ty.size = readBytes m' b o ty.size from by
+    simp only [readBytes]; rw [h]]
+
 end NANO.C.Proofs
