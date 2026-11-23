@@ -202,3 +202,25 @@ theorem ev_tga_mul2 (s : State) (osz ch : Nat)
   rfl
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- A passing overflow check implies `a*b < 2^64`. -/
+theorem sizeMulOK_mul_lt (a b : Nat) (h : sizeMulOK a b = true) : a * b < 2 ^ 64 := by
+  rw [sizeMulOK_eq] at h
+  have hp : a = 0 ∨ b ≤ sizeMax / a := of_decide_eq_true h
+  by_cases ha : a = 0
+  · subst ha; simp
+  · have hapos : 0 < a := Nat.pos_of_ne_zero ha
+    have hle : b ≤ sizeMax / a := by
+      rcases hp with h0 | hle
+      · exact absurd h0 ha
+      · exact hle
+    have hmul : b * a ≤ sizeMax := (Nat.le_div_iff_mul_le hapos).mp hle
+    have hsm : sizeMax = 2 ^ 64 - 1 := rfl
+    rw [hsm] at hmul
+    have hlt : b * a < 2 ^ 64 := by omega
+    simpa [Nat.mul_comm] using hlt
+
+end NANO.C.Proofs
