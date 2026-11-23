@@ -29,6 +29,7 @@ import NANO.Bmp
 import NANO.Tga
 import NANO.TgaWrites
 import NANO.TgaSpec
+import NANO.TgaLoop1Rle
 import NANO.TgaArith
 import NANO.TgaGeometry
 import NANO.C.Proofs.Bmp
