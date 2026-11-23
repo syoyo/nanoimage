@@ -74,7 +74,7 @@ abbrev tgaDecodePre : Stmt :=
   (.seq (.set 5 (.bin .mul (some u64) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))
                             (.cast u64 (.load (.int u32) (.field (.var 2) 20)))))
   (.seq (.set 7 (.load (.int u64) (.field (.var 2) 8)))
-        (.set 6 (.cast u64 (.const (.int i32 0)))))))
+        (.set 6 (.cast u64 (.const (.int ⟨32, false⟩ 0)))))))
 
 theorem ni_tga_decode_preamble (m : Mem) (bd : Nat) (size : Nat) (ob : Nat) (outCap : Nat)
     (obl : List UInt8) (hm : m 3 = some obl) (h32 : obl.length = 32)
@@ -134,11 +134,83 @@ theorem ni_tga_decode_preamble (m : Mem) (bd : Nat) (size : Nat) (ob : Nat) (out
   have hs7 : ExS Gen.prog s3 (.set 7 (.load (.int u64) (.field (.var 2) 8))) .normal
       { s3 with locals := s3.locals.upd 7 (.int u64 dataOffset) } := ExS.set h7
   let s4 : State := { s3 with locals := s3.locals.upd 7 (.int u64 dataOffset) }
-  have h6 : EvE Gen.prog s4 (.cast u64 (.const (.int i32 0))) (.int u64 0) :=
-    EvE.cast (EvE.const (v := .int i32 0)) (i32_u64_cast 0 (by omega))
-  have hs6 : ExS Gen.prog s4 (.set 6 (.cast u64 (.const (.int i32 0)))) .normal
+  have h6 : EvE Gen.prog s4 (.cast u64 (.const (.int ⟨32, false⟩ 0))) (.int u64 0) :=
+    EvE.cast (EvE.const (v := .int ⟨32, false⟩ 0)) (u32_u64_cast 0 (by omega))
+  have hs6 : ExS Gen.prog s4 (.set 6 (.cast u64 (.const (.int ⟨32, false⟩ 0)))) .normal
       { s4 with locals := s4.locals.upd 6 (.int u64 0) } := ExS.set h6
   exact ExS.seq hs8 (ExS.seq hs9 (ExS.seq hs5 (ExS.seq hs7 hs6)))
+
+
+theorem ni_tga_decode_preamble_frame (m : Mem) (bd : Nat) (size : Nat) (ob : Nat) (outCap : Nat)
+    (obl : List UInt8) (hm : m 3 = some obl) (h32 : obl.length = 32)
+    (ro : Bool) (hro : ro = false) (channels rle width height dataOffset : Nat)
+    (hw32 : width < 2 ^ 32) (hh32 : height < 2 ^ 32)
+    (hl8 : load m (.int u8) (.ptr 3 24) = .ok (.int u8 channels))
+    (hl9 : load m (.int u8) (.ptr 3 25) = .ok (.int u8 rle))
+    (hl16 : load m (.int u32) (.ptr 3 16) = .ok (.int u32 width))
+    (hl20 : load m (.int u32) (.ptr 3 20) = .ok (.int u32 height))
+    (hl7 : load m (.int u64) (.ptr 3 8) = .ok (.int u64 dataOffset))
+    (hwh : width * height < 2 ^ 64)
+    (cont : Stmt) (o : Outcome) (s' : State)
+    (hcont : ExS Gen.prog
+      ⟨(frameLocals [0, 1, 2, 3, 4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap]).upd 8 (.int u8 channels)
+        |>.upd 9 (.int u8 rle) |>.upd 5 (.int u64 (width * height))
+        |>.upd 7 (.int u64 dataOffset) |>.upd 6 (.int u64 0), m, ro⟩ cont o s') :
+    ExS Gen.prog
+      ⟨frameLocals [0, 1, 2, 3, 4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap], m, ro⟩
+      (.seq (.set 8 (.load (.int u8) (.field (.var 2) 24)))
+      (.seq (.set 9 (.load (.int u8) (.field (.var 2) 25)))
+      (.seq (.set 5 (.bin .mul (some u64) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))
+                            (.cast u64 (.load (.int u32) (.field (.var 2) 20)))))
+      (.seq (.set 7 (.load (.int u64) (.field (.var 2) 8)))
+      (.seq (.set 6 (.cast u64 (.const (.int ⟨32, false⟩ 0)))) cont))))) o s' := by
+  let s0 : State := ⟨frameLocals [0, 1, 2, 3, 4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap], m, ro⟩
+  have l20 : s0.locals 2 = some (.ptr 3 0) := rfl
+  have F (st : State) (h2 : st.locals 2 = some (.ptr 3 0)) (hmm : st.mem 3 = some obl)
+      (o : Nat) (ho : o ≤ obl.length) : EvE Gen.prog st (.field (.var 2) o) (.ptr 3 (0 + o)) :=
+    EvE.field (EvE.var h2) (ptrAddN_ok hmm (by omega))
+  have h8 : EvE Gen.prog s0 (.load (.int u8) (.field (.var 2) 24)) (.int u8 channels) :=
+    EvE.load (F s0 l20 hm 24 (by omega)) (by simpa using hl8)
+  have hs8 : ExS Gen.prog s0 (.set 8 (.load (.int u8) (.field (.var 2) 24))) .normal
+      { s0 with locals := s0.locals.upd 8 (.int u8 channels) } := ExS.set h8
+  let s1 : State := { s0 with locals := s0.locals.upd 8 (.int u8 channels) }
+  have l21 : s1.locals 2 = some (.ptr 3 0) := by
+    show (s0.locals.upd 8 (.int u8 channels)) 2 = some (.ptr 3 0)
+    simpa [Locals.upd_ne] using l20
+  have hm1 : s1.mem 3 = some obl := by simpa using hm
+  have h9 : EvE Gen.prog s1 (.load (.int u8) (.field (.var 2) 25)) (.int u8 rle) :=
+    EvE.load (F s1 l21 hm1 25 (by omega)) (by simpa using hl9)
+  have hs9 : ExS Gen.prog s1 (.set 9 (.load (.int u8) (.field (.var 2) 25))) .normal
+      { s1 with locals := s1.locals.upd 9 (.int u8 rle) } := ExS.set h9
+  let s2 : State := { s1 with locals := s1.locals.upd 9 (.int u8 rle) }
+  have l22 : s2.locals 2 = some (.ptr 3 0) := by
+    show (s1.locals.upd 9 (.int u8 rle)) 2 = some (.ptr 3 0)
+    simpa [Locals.upd_ne] using l21
+  have hm2 : s2.mem 3 = some obl := by simpa using hm
+  have h16 : EvE Gen.prog s2 (.load (.int u32) (.field (.var 2) 16)) (.int u32 width) :=
+    EvE.load (F s2 l22 hm2 16 (by omega)) (by simpa using hl16)
+  have h20 : EvE Gen.prog s2 (.load (.int u32) (.field (.var 2) 20)) (.int u32 height) :=
+    EvE.load (F s2 l22 hm2 20 (by omega)) (by simpa using hl20)
+  have hs5 : ExS Gen.prog s2 (.set 5 (.bin .mul (some u64) (.cast u64 (.load (.int u32) (.field (.var 2) 16)))
+        (.cast u64 (.load (.int u32) (.field (.var 2) 20))))) .normal
+      { s2 with locals := s2.locals.upd 5 (.int u64 (width * height)) } :=
+    ExS.set (EvE.bin (EvE.cast h16 (u32_u64_cast width hw32)) (EvE.cast h20 (u32_u64_cast height hh32))
+      (bin_u64_mul width height hwh))
+  let s3 : State := { s2 with locals := s2.locals.upd 5 (.int u64 (width * height)) }
+  have l23 : s3.locals 2 = some (.ptr 3 0) := by
+    show (s2.locals.upd 5 (.int u64 (width * height))) 2 = some (.ptr 3 0)
+    simpa [Locals.upd_ne] using l22
+  have hm3 : s3.mem 3 = some obl := by simpa using hm
+  have h7 : EvE Gen.prog s3 (.load (.int u64) (.field (.var 2) 8)) (.int u64 dataOffset) :=
+    EvE.load (F s3 l23 hm3 8 (by omega)) (by simpa using hl7)
+  have hs7 : ExS Gen.prog s3 (.set 7 (.load (.int u64) (.field (.var 2) 8))) .normal
+      { s3 with locals := s3.locals.upd 7 (.int u64 dataOffset) } := ExS.set h7
+  let s4 : State := { s3 with locals := s3.locals.upd 7 (.int u64 dataOffset) }
+  have h6 : EvE Gen.prog s4 (.cast u64 (.const (.int ⟨32, false⟩ 0))) (.int u64 0) :=
+    EvE.cast (EvE.const (v := .int ⟨32, false⟩ 0)) (u32_u64_cast 0 (by omega))
+  have hs6 : ExS Gen.prog s4 (.set 6 (.cast u64 (.const (.int ⟨32, false⟩ 0)))) .normal
+      { s4 with locals := s4.locals.upd 6 (.int u64 0) } := ExS.set h6
+  exact ExS.seq hs8 (ExS.seq hs9 (ExS.seq hs5 (ExS.seq hs7 (ExS.seq hs6 hcont))))
 
 end NANO.C.Proofs
 
@@ -2130,5 +2202,70 @@ theorem ni_tga_loop1_rle_ok (st0 : State) (h : TgaInfo) (ob bd : Nat) (obl info 
   rw [show h.width * h.height - 0 = h.width * h.height from by omega] at hmem
   rw [tgaFoldRaw_eq_materialize dat h 0 h.dataOffset (h.width * h.height) obl hobl] at hmem
   exact hmem
+
+theorem ni_tga_decode_into_ok_rle0 (m : Mem) (bd size ob outCap : Nat) (info dat : List UInt8) (ro : Bool) (h : TgaInfo)
+    (hsize : size = dat.length) (hm3 : m 3 = some info) (h32 : info.length = 32)
+    (hmbd : m bd = some dat) (hmob : m ob = some (tgaMaterialize h.outputSize []))
+    (hbdo : bd ≠ ob) (hob3 : ob ≠ 3) (hbd3 : bd ≠ 3) (hro : ro = false)
+    (hrle0 : h.rle = 0)
+    (hl8 : load m (.int u8) (.ptr 3 24) = .ok (.int u8 h.channels))
+    (hl9 : load m (.int u8) (.ptr 3 25) = .ok (.int u8 h.rle))
+    (hl16 : load m (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load m (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl7 : load m (.int u64) (.ptr 3 8) = .ok (.int u64 h.dataOffset))
+    (hl26 : load m (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load m (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hch : h.channels < 256) (hcp : 0 < h.channels)
+    (hdat64 : dat.length < 2 ^ 64) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hoblob : (tgaMaterialize h.outputSize []).length < 2 ^ 64)
+    (hbnd : ∀ q, q < h.width * h.height → TgaPixelBounds h q)
+    (hwbf : ∀ q, q < h.width * h.height → tgaDstIndex h q + h.channels ≤ (tgaMaterialize h.outputSize []).length)
+    (hdbnd : ∀ i, i < h.width * h.height → h.dataOffset + i * h.channels + h.channels ≤ dat.length)
+    (hdob : ∀ i, i < h.width * h.height → h.dataOffset + i * h.channels + h.channels < 2 ^ 64)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    ∃ s' p, tgaPixels dat h = Except.ok p ∧
+      ExS Gen.prog ⟨frameLocals [0,1,2,3,4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap], m, ro⟩
+        Gen.ni_tga_decode_into.body (.ret (some (.int ⟨32, true⟩ 0))) s' ∧
+      s'.mem ob = some p := by
+  let base : Locals := frameLocals [0,1,2,3,4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap]
+  let st0 : State := ⟨base, m, ro⟩
+  let mid : State := ⟨base.upd 8 (.int u8 h.channels) |>.upd 9 (.int u8 h.rle) |>.upd 5 (.int u64 (h.width * h.height)) |>.upd 7 (.int u64 h.dataOffset) |>.upd 6 (.int u64 0), m, ro⟩
+  have hinv : TgaL1Inv mid h (h.width * h.height) ob bd (tgaMaterialize h.outputSize []) info dat 0 h.dataOffset := by
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 0 [0,1,2,3,4] = some 0 from by decide]; rfl
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 1 [0,1,2,3,4] = some 1 from by decide]; simp [hsize]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 2 [0,1,2,3,4] = some 2 from by decide]; rfl
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 3 [0,1,2,3,4] = some 3 from by decide]; rfl
+    · dsimp only [mid]; exact hmob
+    · dsimp only [mid]; exact hm3
+    · dsimp only [mid]; exact hmbd
+    · dsimp only [mid]; exact hro
+    · simp
+  obtain ⟨st', ws, hspec, hrun, hmem⟩ :=
+    ni_tga_loop1_rle_ok mid h ob bd (tgaMaterialize h.outputSize []) info dat hinv rfl hrle0
+      hch hcp hdat64 hob3 hbd3 hbdo hoblob h32 hwh64 hl16 hl20 hl26 hl27 hw32 hh32 hwpos hhpos hro8 hto8 hwh64
+      hbnd hwbf hdbnd hdob hc
+  have hret : ExS Gen.prog st' (.ret (some (.const (.int ⟨32, true⟩ 0)))) (.ret (some (.int ⟨32, true⟩ 0))) st' :=
+    ExS.ret (EvE.const (v := .int ⟨32, true⟩ 0))
+  refine ⟨st', tgaMaterialize h.outputSize ws, ?_, ?_, hmem⟩
+  · simp only [tgaPixels, tgaWrites]
+    rw [hspec]; rfl
+  · have hcont : ExS Gen.prog mid (.seq tgaLoop1 (.ret (some (.const (.int ⟨32, true⟩ 0))))) (.ret (some (.int ⟨32, true⟩ 0))) st' :=
+      ExS.seq hrun hret
+    dsimp only [Gen.ni_tga_decode_into]
+    exact ni_tga_decode_preamble_frame m bd size ob outCap info hm3 h32 ro hro h.channels h.rle h.width h.height h.dataOffset hw32 hh32 hl8 hl9 hl16 hl20 hl7 hwh64
+      (.seq tgaLoop1 (.ret (some (.const (.int ⟨32, true⟩ 0))))) (.ret (some (.int ⟨32, true⟩ 0))) st' hcont
+
 
 end NANO.C.Proofs
