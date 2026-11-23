@@ -152,4 +152,54 @@ theorem tgaFoldRaw_length (obl : List UInt8) (h : TgaInfo) (p0 off0 ch : Nat) (d
   | zero => rfl
   | succ i ih => rw [tgaFoldRaw_succ, tgaWriteAt_length, ih]
 
+
+/-- A pure `foldlM` over `List.range`, recording only the accumulator, equals the
+    corresponding `foldl`. -/
+theorem foldlM_range_pure (n : Nat) (fN : Nat → List UInt8 → List UInt8) (b : List UInt8) :
+    (List.range n).foldlM (fun (st : Nat × List UInt8) i => pure (st.1, fN i st.2)) (0, b)
+      = some (0, (List.range n).foldl (fun acc i => fN i acc) b) := by
+  induction n with
+  | zero => rfl
+  | succ n ih => simp only [List.range_succ, List.foldlM_append, List.foldl_append]; rw [ih]; rfl
+
+
+theorem tgaFoldI_foldl (obl : List UInt8) (h : TgaInfo) (p0 : Nat) (bytes : List UInt8) (i : Nat) :
+    tgaFoldI obl h p0 bytes i
+      = (List.range i).foldl (fun acc j => tgaWriteAt acc (tgaDstIndex h (p0 + j), bytes)) obl := by
+  induction i with
+  | zero => rfl
+  | succ i ih => rw [tgaFoldI_succ, ih, List.range_succ, List.foldl_append]; rfl
+
+
+theorem tgaMaterialize_append_foldl (n : Nat) (ws L : List TgaWrite) :
+    tgaMaterialize n (ws ++ L) = L.foldl tgaWriteAt (tgaMaterialize n ws) := by
+  simp only [tgaMaterialize, List.foldl_append]
+
+theorem tgaFoldRaw_foldl (obl : List UInt8) (h : TgaInfo) (p0 off0 ch : Nat) (dat : List UInt8) (i : Nat) :
+    tgaFoldRaw obl h p0 off0 ch dat i
+      = (List.range i).foldl (fun acc j => tgaWriteAt acc
+          (tgaDstIndex h (p0 + j),
+           tgaPixelOut ch (UInt8.ofNat (byteAt dat (off0 + j * ch))) (UInt8.ofNat (byteAt dat (off0 + j * ch + 1)))
+             (UInt8.ofNat (byteAt dat (off0 + j * ch + 2))) (UInt8.ofNat (byteAt dat (off0 + j * ch + 3))))) obl := by
+  induction i with
+  | zero => rfl
+  | succ i ih => rw [tgaFoldRaw_succ, ih, List.range_succ, List.foldl_append]; rfl
+
+/-- Materialising a write list extended by an RLE packet's `count` identical
+    writes equals folding those writes onto the buffer (`tgaFoldI`). -/
+theorem tgaMaterialize_rle (n p0 : Nat) (h : TgaInfo) (ws : List TgaWrite) (bytes : List UInt8) (count : Nat) :
+    tgaMaterialize n (ws ++ (List.range count).map (fun i => (tgaDstIndex h (p0 + i), bytes)))
+      = tgaFoldI (tgaMaterialize n ws) h p0 bytes count := by
+  rw [tgaMaterialize_append_foldl, tgaFoldI_foldl, List.foldl_map]
+
+/-- Materialising a write list extended by a raw packet's per-pixel writes
+    equals folding those writes onto the buffer (`tgaFoldRaw`). -/
+theorem tgaMaterialize_raw (n p0 off0 ch : Nat) (h : TgaInfo) (ws : List TgaWrite) (dat : List UInt8) (count : Nat) :
+    tgaMaterialize n (ws ++ (List.range count).map (fun i =>
+        (tgaDstIndex h (p0 + i),
+         tgaPixelOut ch (UInt8.ofNat (byteAt dat (off0 + i * ch))) (UInt8.ofNat (byteAt dat (off0 + i * ch + 1)))
+           (UInt8.ofNat (byteAt dat (off0 + i * ch + 2))) (UInt8.ofNat (byteAt dat (off0 + i * ch + 3))))))
+      = tgaFoldRaw (tgaMaterialize n ws) h p0 off0 ch dat count := by
+  rw [tgaMaterialize_append_foldl, tgaFoldRaw_foldl, List.foldl_map]
+
 end NANO
