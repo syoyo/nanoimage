@@ -137,3 +137,68 @@ theorem ev_tga_badtype (s : State) (b2 : Nat) (l5 : s.locals 5 = some (.int u8 b
   exact land_step (land_step (land_step (nb 2) (nb 3)) (nb 10)) (nb 11)
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- `sizeMulOK a b` equals the `decide` of its underlying proposition. -/
+theorem sizeMulOK_eq (a b : Nat) : sizeMulOK a b = decide (a = 0 ∨ b ≤ sizeMax / a) := by
+  simp only [sizeMulOK]
+  rw [show (a == 0) = decide (a = 0) from by cases a <;> rfl]
+  by_cases h : a = 0 <;> simp [h]
+
+/-- First overflow gate: `!ni_bmp_mul_fits(w, h)`. -/
+theorem ev_tga_mul1 (s : State) (w hh : Nat)
+    (l6 : s.locals 6 = some (.int u16 w)) (l7 : s.locals 7 = some (.int u16 hh))
+    (hw : w < 65536) (hhh : hh < 65536) :
+    EvE Gen.prog s (.un .lnot i32 (.call 11 [(.cast u64 (.var 6)), (.cast u64 (.var 7))]))
+      (boolVal (! (sizeMulOK w hh))) := by
+  obtain ⟨s', exs⟩ := ni_bmp_mul_fits_exs s.mem w hh (by omega) (by omega) true
+  have call : EvE Gen.prog s (.call 11 [(.cast u64 (.var 6)), (.cast u64 (.var 7))])
+      (.int i32 (if (w = 0 ∨ hh ≤ 18446744073709551615 / w) then 1 else 0)) :=
+    EvE.call (EvArgs.cons (EvE.cast (EvE.var l6) (u16_u64_cast w hw))
+              (EvArgs.cons (EvE.cast (EvE.var l7) (u16_u64_cast hh hhh)) EvArgs.nil))
+      (show Gen.prog 11 = some Gen.ni_bmp_mul_fits from rfl)
+      (show Gen.ni_bmp_mul_fits.params.length = 2 from rfl) exs
+  refine EvE.un call ?_
+  have hval : ((if (w = 0 ∨ hh ≤ 18446744073709551615 / w) then (1 : Nat) else 0) != 0) = sizeMulOK w hh := by
+    rw [sizeMulOK_eq]
+    have hsm : sizeMax = 18446744073709551615 := by decide
+    by_cases hF : (w = 0 ∨ hh ≤ 18446744073709551615 / w)
+    · rw [if_pos hF]
+      have e : decide (w = 0 ∨ hh ≤ sizeMax / w) = true := by rw [hsm]; exact decide_eq_true_eq.mpr hF
+      rw [e]; decide
+    · rw [if_neg hF]
+      have e : decide (w = 0 ∨ hh ≤ sizeMax / w) = false := by rw [hsm]; exact decide_eq_false_iff_not.mpr hF
+      rw [e]; decide
+  simp only [evalUn, truthy, Res.bind_eq, Res.bind_ok, hval]
+  rfl
+
+/-- Second overflow gate: `!ni_bmp_mul_fits(outputSize, channels)`. -/
+theorem ev_tga_mul2 (s : State) (osz ch : Nat)
+    (l11 : s.locals 11 = some (.int u64 osz)) (l10 : s.locals 10 = some (.int u8 ch))
+    (hosz : osz < 2 ^ 64) (hch : ch < 256) :
+    EvE Gen.prog s (.un .lnot i32 (.call 11 [(.var 11), (.cast u64 (.var 10))]))
+      (boolVal (! (sizeMulOK osz ch))) := by
+  obtain ⟨s', exs⟩ := ni_bmp_mul_fits_exs s.mem osz ch (by omega) (by omega) true
+  have call : EvE Gen.prog s (.call 11 [(.var 11), (.cast u64 (.var 10))])
+      (.int i32 (if (osz = 0 ∨ ch ≤ 18446744073709551615 / osz) then 1 else 0)) :=
+    EvE.call (EvArgs.cons (EvE.var l11)
+              (EvArgs.cons (EvE.cast (EvE.var l10) (u8_u64_cast ch hch)) EvArgs.nil))
+      (show Gen.prog 11 = some Gen.ni_bmp_mul_fits from rfl)
+      (show Gen.ni_bmp_mul_fits.params.length = 2 from rfl) exs
+  refine EvE.un call ?_
+  have hval : ((if (osz = 0 ∨ ch ≤ 18446744073709551615 / osz) then (1 : Nat) else 0) != 0) = sizeMulOK osz ch := by
+    rw [sizeMulOK_eq]
+    have hsm : sizeMax = 18446744073709551615 := by decide
+    by_cases hF : (osz = 0 ∨ ch ≤ 18446744073709551615 / osz)
+    · rw [if_pos hF]
+      have e : decide (osz = 0 ∨ ch ≤ sizeMax / osz) = true := by rw [hsm]; exact decide_eq_true_eq.mpr hF
+      rw [e]; decide
+    · rw [if_neg hF]
+      have e : decide (osz = 0 ∨ ch ≤ sizeMax / osz) = false := by rw [hsm]; exact decide_eq_false_iff_not.mpr hF
+      rw [e]; decide
+  simp only [evalUn, truthy, Res.bind_eq, Res.bind_ok, hval]
+  rfl
+
+end NANO.C.Proofs
