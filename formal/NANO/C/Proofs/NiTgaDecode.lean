@@ -1652,4 +1652,73 @@ theorem tgaPixelOut_length (ch b0 b1 b2 b3 : Nat) (hc : ch = 1 ∨ ch = 3 ∨ ch
     (tgaPixelOut ch (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length = ch := by
   rcases hc with rfl | rfl | rfl <;> simp [tgaPixelOut]
 
+
+theorem ni_tga_loop1_rle (st0 : State) (h : TgaInfo) (npx ob bd : Nat) (obl info dat : List UInt8) (p0 off0 : Nat)
+    (hinv : TgaL1Inv st0 h npx ob bd obl info dat p0 off0) (hpn : p0 ≤ npx) (hrle0 : h.rle = 0)
+    (hch : h.channels < 256) (hcp : 0 < h.channels) (hdat64 : dat.length < 2 ^ 64) (hob3 : ob ≠ 3) (hbd3 : bd ≠ 3) (hbdo : bd ≠ ob)
+    (hlob : obl.length < 2 ^ 64) (h32 : info.length = 32) (hcount64 : npx < 2 ^ 64)
+    (hl16 : load st0.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load st0.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load st0.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load st0.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hbnd : ∀ q, q < npx → TgaPixelBounds h q)
+    (hwbf : ∀ q, q < npx → tgaDstIndex h q + h.channels ≤ obl.length)
+    (hdbnd : ∀ i, i < npx - p0 → off0 + i * h.channels + h.channels ≤ dat.length)
+    (hdob : ∀ i, i < npx - p0 → off0 + i * h.channels + h.channels < 2 ^ 64)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    ∃ st', ExS Gen.prog st0 tgaLoop1 .normal st' ∧ TgaL1Inv st' h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat (npx - p0)) info dat npx (off0 + (npx - p0) * h.channels) := by
+  have hinv0' := hinv
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, hinfo0, _, _, _⟩ := hinv0'
+  have aux : ∀ (k : Nat) (st : State) (pidx : Nat), npx - pidx = k → p0 ≤ pidx →
+      TgaL1Inv st h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat (pidx - p0)) info dat pidx (off0 + (pidx - p0) * h.channels) →
+      ∃ st', ExS Gen.prog st tgaLoop1 .normal st' ∧ TgaL1Inv st' h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat (npx - p0)) info dat npx (off0 + (npx - p0) * h.channels) := by
+    intro k
+    induction k with
+    | zero =>
+      intro st pidx hk hp0 hinv
+      obtain ⟨l5, l6, l7, l8, l9, l0, l1, l2, l3, hmob, hinfo, hmemdat, hro, hle⟩ := hinv
+      have hpideq : pidx = npx := by omega
+      have hlf : ¬ pidx < npx := by omega
+      have hcond : EvE Gen.prog st (.bin .lt (some u64) (.var 6) (.var 5)) (boolVal false) :=
+        EvE.bin (EvE.var l6) (EvE.var l5) (by rw [bin_u64_lt, decide_eq_false hlf])
+      have hbE : ExS Gen.prog st (.ite (.bin .lt (some u64) (.var 6) (.var 5)) tgaL1Big .brk) .brk st :=
+        ExS.ite (bc := false) hcond (by simp [truthy_boolVal]) ExS.brk
+      refine ⟨st, ExS.loop_brk hbE, ?_⟩
+      have hinv_re : TgaL1Inv st h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat (pidx - p0)) info dat pidx (off0 + (pidx - p0) * h.channels) := ⟨l5, l6, l7, l8, l9, l0, l1, l2, l3, hmob, hinfo, hmemdat, hro, hle⟩
+      exact hpideq ▸ hinv_re
+    | succ k ih =>
+      intro st pidx hk hp0 hinv
+      have hlt : pidx < npx := by omega
+      obtain ⟨l5, l6, l7, l8, l9, l0, l1, l2, l3, hmob, hinfo, hmemdat, hro, hle⟩ := hinv
+      have hm3 : st0.mem 3 = st.mem 3 := by rw [hinfo0, hinfo]
+      have hL16 : load st.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width) := by rw [← load_ptr_congr st0.mem st.mem 3 16 (.int u32) hm3]; exact hl16
+      have hL20 : load st.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height) := by rw [← load_ptr_congr st0.mem st.mem 3 20 (.int u32) hm3]; exact hl20
+      have hL26 : load st.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin) := by rw [← load_ptr_congr st0.mem st.mem 3 26 (.int u8) hm3]; exact hl26
+      have hL27 : load st.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin) := by rw [← load_ptr_congr st0.mem st.mem 3 27 (.int u8) hm3]; exact hl27
+      have heqfold : tgaFoldI (tgaFoldRaw obl h p0 off0 h.channels dat (pidx - p0)) h pidx
+            (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + (pidx - p0) * h.channels))) (UInt8.ofNat (if 1 < h.channels then byteAt dat (off0 + (pidx - p0) * h.channels + 1) else 0)) (UInt8.ofNat (if 2 < h.channels then byteAt dat (off0 + (pidx - p0) * h.channels + 2) else 0)) (UInt8.ofNat (if 3 < h.channels then byteAt dat (off0 + (pidx - p0) * h.channels + 3) else 255))) 1
+          = tgaFoldRaw obl h p0 off0 h.channels dat ((pidx + 1) - p0) := by
+        have hh := tgaFoldI_raw_eq obl h p0 off0 dat (pidx - p0) hc
+        rw [show p0 + (pidx - p0) = pidx from by omega, show (pidx - p0) + 1 = (pidx + 1) - p0 from by omega] at hh
+        exact hh
+      obtain ⟨s1, hbE, hinv1⟩ :=
+        ni_tga_l1step_rle0 st h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat (pidx - p0)) info dat pidx (off0 + (pidx - p0) * h.channels)
+          ⟨l5, l6, l7, l8, l9, l0, l1, l2, l3, hmob, hinfo, hmemdat, hro, hle⟩ hlt hrle0 hch hcp hdat64 hob3 hbd3 hbdo
+          (hdbnd (pidx - p0) (by omega)) (hdob (pidx - p0) (by omega)) (by rw [tgaFoldRaw_length]; exact hlob) h32 hcount64
+          hL16 hL20 hL26 hL27 hw32 hh32 hwpos hhpos hro8 hto8 hwh64
+          (by intro q hq; exact hbnd q (by omega))
+          (by intro p hp; rw [tgaPixelOut_length h.channels (byteAt dat (off0 + (pidx - p0) * h.channels)) (if 1 < h.channels then byteAt dat (off0 + (pidx - p0) * h.channels + 1) else 0) (if 2 < h.channels then byteAt dat (off0 + (pidx - p0) * h.channels + 2) else 0) (if 3 < h.channels then byteAt dat (off0 + (pidx - p0) * h.channels + 3) else 255) hc, tgaFoldRaw_length]; exact hwbf p (by omega))
+          hc
+      have hinv2 : TgaL1Inv s1 h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat ((pidx + 1) - p0)) info dat (pidx + 1) (off0 + ((pidx + 1) - p0) * h.channels) := by
+        rw [heqfold, show off0 + (pidx - p0) * h.channels + h.channels = off0 + ((pidx + 1) - p0) * h.channels from by rw [show (pidx+1)-p0 = (pidx-p0)+1 from by omega, Nat.succ_mul, Nat.add_assoc]] at hinv1
+        exact hinv1
+      have hk' : npx - (pidx + 1) = k := by omega
+      obtain ⟨st', hrec, hinv'⟩ := ih s1 (pidx + 1) hk' (by omega) hinv2
+      exact ⟨st', ExS.loop_next hbE (Or.inl rfl) ExS.skip hrec, hinv'⟩
+  have hstart : TgaL1Inv st0 h npx ob bd (tgaFoldRaw obl h p0 off0 h.channels dat (p0 - p0)) info dat p0 (off0 + (p0 - p0) * h.channels) := by
+    rw [Nat.sub_self, Nat.zero_mul, Nat.add_zero, show tgaFoldRaw obl h p0 off0 h.channels dat 0 = obl from rfl]
+    exact hinv
+  exact aux (npx - p0) st0 p0 rfl (by omega) hstart
 end NANO.C.Proofs
