@@ -1514,4 +1514,16 @@ theorem ni_tga_l1pre_rle0 (s : State) (bd : Nat) (dat : List UInt8) (hm : s.mem 
     exact hbytes
   exact ExS.seq e10 (ExS.seq e11 (ExS.seq e12 (ExS.seq e13 (ExS.seq e14 (ExS.seq e15 (ExS.seq hiterle (ExS.seq hchk (ExS.seq hiteraw hcont))))))))
 
+
+/-- loop1 invariant: pixel cursor pidx, data cursor off, buffer obl, with the
+    packet-loop's fixed configuration (channels, rle, pointers). -/
+def TgaL1Inv (s : State) (h : TgaInfo) (npx ob bd : Nat) (obl info dat : List UInt8) (pidx off : Nat) : Prop :=
+  s.locals 5 = some (.int u64 npx) ∧ s.locals 6 = some (.int u64 pidx) ∧
+  s.locals 7 = some (.int u64 off) ∧ s.locals 8 = some (.int u8 h.channels) ∧
+  s.locals 9 = some (.int u8 h.rle) ∧
+  s.locals 0 = some (.ptr bd 0) ∧ s.locals 1 = some (.int u64 dat.length) ∧
+  s.locals 2 = some (.ptr 3 0) ∧ s.locals 3 = some (.ptr ob 0) ∧
+  s.mem ob = some obl ∧ s.mem 3 = some info ∧ s.mem bd = some dat ∧
+  s.ro = false ∧ pidx ≤ npx
+
 end NANO.C.Proofs
