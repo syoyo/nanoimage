@@ -555,3 +555,19 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
     rw [hm5]; exact hinfo
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- The raw-read pixel bytes (unread channels keep their preset) equal the
+    canonical `tgaPixelOut` of the four data bytes, for `channels ∈ {1,3,4}`. -/
+theorem tgaPixelOut_raw (channels b1 b2 b3 d0 d1 d2 d3 : Nat)
+    (hc : channels = 1 ∨ channels = 3 ∨ channels = 4) :
+    tgaPixelOut channels (UInt8.ofNat d0)
+        (UInt8.ofNat (if 1 < channels then d1 else b1))
+        (UInt8.ofNat (if 2 < channels then d2 else b2))
+        (UInt8.ofNat (if 3 < channels then d3 else b3)) =
+      tgaPixelOut channels (UInt8.ofNat d0) (UInt8.ofNat d1) (UInt8.ofNat d2) (UInt8.ofNat d3) := by
+  rcases hc with rfl | rfl | rfl <;> simp [tgaPixelOut]
+
+end NANO.C.Proofs
