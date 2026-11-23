@@ -404,3 +404,32 @@ theorem ni_tga_raw_read (s : State) (bd : Nat) (bs : List UInt8) (hm : s.mem bd 
   simpa [tgaRawRead, s4, s3, s2, s1] using hcomp
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- RLE-clear raw-packet test: `rle ≠ 0 ∧ (header & 0x80) = 0`. -/
+abbrev tgaRawCond : Expr :=
+  .land (.bin .ne (some u32) (.cast u32 (.var 9)) (.const (.int u32 0)))
+        (.bin .eq (some u32) (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 128))) (.const (.int u32 0)))
+
+abbrev tgaCall : Stmt :=
+  .call (some 26) 22 [(.var 3), (.var 25), (.var 8), (.var 17), (.var 18), (.var 19), (.var 20)]
+
+abbrev tgaWrCheck : Stmt :=
+  .ite (.un .lnot i32 (.var 26)) (.ret (some (.const (.int i32 12)))) .skip
+
+abbrev tgaPixelInc : Stmt :=
+  .set 6 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 6)) (.cast u64 (.cast u64 (.const (.int u32 1))))))
+
+abbrev tgaPixelBody : Stmt :=
+  .seq (.set 17 (.var 12))
+  (.seq (.set 18 (.var 13))
+  (.seq (.set 19 (.var 14))
+  (.seq (.set 20 (.var 15))
+  (.seq (.ite tgaRawCond tgaRawRead .skip)
+  (.seq tgaDstCompute
+  (.seq tgaCall
+  (.seq tgaWrCheck tgaPixelInc)))))))
+
+end NANO.C.Proofs
