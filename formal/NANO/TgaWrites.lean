@@ -202,4 +202,29 @@ theorem tgaMaterialize_raw (n p0 off0 ch : Nat) (h : TgaInfo) (ws : List TgaWrit
       = tgaFoldRaw (tgaMaterialize n ws) h p0 off0 ch dat count := by
   rw [tgaMaterialize_append_foldl, tgaFoldRaw_foldl, List.foldl_map]
 
+
+/-- An RLE packet's `foldlM` appends its `count` identical writes to the list. -/
+theorem foldlM_rle_writes (n o : Nat) (w : Nat → TgaWrite) (acc : List TgaWrite) :
+    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i => pure (st.1, st.2 ++ [w i])) (o, acc)
+      = some (o, acc ++ (List.range n).map w) := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [List.range_succ, List.foldlM_append, ih]
+    change some (o, acc ++ List.map w (List.range n) ++ [w n]) = _
+    simp [List.map_append]
+
+/-- A raw packet's `foldlM` advances the data cursor by `ch` per pixel and
+    appends each pixel's write. -/
+theorem foldlM_raw_writes (n o ch : Nat) (w : Nat → Nat → TgaWrite) (acc : List TgaWrite) :
+    (List.range n).foldlM (fun (st : Nat × List TgaWrite) i => pure (st.1 + ch, st.2 ++ [w (st.1) i])) (o, acc)
+      = some (o + n * ch, acc ++ (List.range n).map (fun i => w (o + i * ch) i)) := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    rw [List.range_succ, List.foldlM_append, ih]
+    change some (o + n * ch + ch, acc ++ List.map (fun i => w (o + i * ch) i) (List.range n) ++ [w (o + n * ch) n]) = _
+    rw [show (o + n * ch) + ch = o + (n + 1) * ch from by rw [Nat.succ_mul]; omega]
+    simp [List.map_append]
+
 end NANO
