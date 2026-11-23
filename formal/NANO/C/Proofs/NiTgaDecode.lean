@@ -571,3 +571,75 @@ theorem tgaPixelOut_raw (channels b1 b2 b3 d0 d1 d2 d3 : Nat)
   rcases hc with rfl | rfl | rfl <;> simp [tgaPixelOut]
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- The dst-compute + write-pixel + wr-check + pixel++ tail, given the pixel
+    bytes already in locals 17-20. -/
+theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl : List UInt8)
+    (hmob : s.mem ob = some obl) (hlob : obl.length < 2 ^ 64) (hro : s.ro = false) (hob3 : ob ≠ 3)
+    (info : List UInt8) (hinfo : s.mem 3 = some info) (h32 : info.length = 32)
+    (l2 : s.locals 2 = some (.ptr 3 0)) (l3 : s.locals 3 = some (.ptr ob 0))
+    (l6 : s.locals 6 = some (.int u64 p)) (l8 : s.locals 8 = some (.int u8 h.channels))
+    (r0v r1v r2v r3v : Nat)
+    (l17 : s.locals 17 = some (.int u8 r0v)) (l18 : s.locals 18 = some (.int u8 r1v))
+    (l19 : s.locals 19 = some (.int u8 r2v)) (l20 : s.locals 20 = some (.int u8 r3v))
+    (hl16 : load s.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load s.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load s.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load s.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hpw : p / h.width < 2 ^ 32) (hch : h.channels < 256) (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hp : p < 2 ^ 64) (hpp : p < h.width * h.height) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hmul : tgaDstY h p * h.width < 2 ^ 64) (hadd : tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64)
+    (hidx : (tgaDstY h p * h.width + tgaDstX h p) * h.channels < 2 ^ 64)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
+    (hr0 : r0v < 256) (hr1 : r1v < 256) (hr2 : r2v < 256) (hr3 : r3v < 256)
+    (hwb : tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length ≤ obl.length) :
+    ∃ s', ExS Gen.prog s (.seq tgaDstCompute (.seq tgaCall (.seq tgaWrCheck tgaPixelInc))) .normal s' ∧
+      s'.locals 6 = some (.int u64 (p + 1)) ∧
+      s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length)) ∧
+      s'.mem 3 = some info := by
+  obtain ⟨s5, hdst, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
+    ni_tga_dst_compute s h p info hinfo h32 l2 l6 l8 hl16 hl20 hl26 hl27
+      hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
+  have l3_5 : s5.locals 3 = some (.ptr ob 0) := by rw [h3d]; exact l3
+  have l8_5 : s5.locals 8 = some (.int u8 h.channels) := by rw [h8d]; exact l8
+  have l17_5 : s5.locals 17 = some (.int u8 r0v) := by rw [h17d]; exact l17
+  have l18_5 : s5.locals 18 = some (.int u8 r1v) := by rw [h18d]; exact l18
+  have l19_5 : s5.locals 19 = some (.int u8 r2v) := by rw [h19d]; exact l19
+  have l20_5 : s5.locals 20 = some (.int u8 r3v) := by rw [h20d]; exact l20
+  have hmob5 : s5.mem ob = some obl := by rw [hm5]; exact hmob
+  have hro5' : s5.ro = false := by rw [hro5]; exact hro
+  have hcall : ExS Gen.prog s5 tgaCall .normal
+      ⟨s5.locals.upd 26 (.int i32 1), s5.mem.upd ob (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length)), s5.ro⟩ :=
+    ni_tga_write_pixel_stmt_exs s5 ob obl hmob5 (tgaDstIndex h p) (by rw [tgaDstIndex_eq]; exact hidx) hlob
+      h.channels r0v r1v r2v r3v hc hr0 hr1 hr2 hr3 hwb hro5' l3_5 h25 l8_5 l17_5 l18_5 l19_5 l20_5
+  let s6 : State := ⟨s5.locals.upd 26 (.int i32 1), s5.mem.upd ob (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length)), s5.ro⟩
+  have hwr : ExS Gen.prog s6 tgaWrCheck .normal s6 := ni_tga_decode_wr_check s6 rfl
+  have l6_6 : s6.locals 6 = some (.int u64 p) := by
+    show (s5.locals.upd 26 (.int i32 1)) 6 = some (.int u64 p)
+    rw [show (s5.locals.upd 26 (.int i32 1)) 6 = s5.locals 6 from by simp [Locals.upd_ne]]
+    rw [h6d]; exact l6
+  have hp1 : p + 1 < 2 ^ 64 := by omega
+  have e6 : EvE Gen.prog s6 (.cast u64 (.var 6)) (.int u64 p) := EvE.cast (EvE.var l6_6) (u64_u64_cast p hp)
+  have e1 : EvE Gen.prog s6 (.cast u64 (.cast u64 (.const (.int u32 1)))) (.int u64 1) :=
+    EvE.cast (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (u64_u64_cast 1 (by omega))
+  have einc : EvE Gen.prog s6 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 6)) (.cast u64 (.cast u64 (.const (.int u32 1)))))) (.int u64 (p + 1)) :=
+    EvE.cast (EvE.bin e6 e1 (bin_u64_add p 1 hp1)) (u64_u64_cast (p + 1) hp1)
+  let s7 : State := { s6 with locals := s6.locals.upd 6 (.int u64 (p + 1)) }
+  have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
+  refine ⟨s7, ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)), ?_, ?_, ?_⟩
+  · show s7.locals 6 = some (.int u64 (p + 1))
+    simp [s7, Locals.upd_same]
+  · show s7.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length))
+    show (s6.mem) ob = _
+    show (s5.mem.upd ob _) ob = _
+    rw [Mem.upd_same]
+  · show s7.mem 3 = some info
+    show (s5.mem.upd ob _) 3 = some info
+    rw [show (s5.mem.upd ob _) 3 = s5.mem 3 from by rw [Mem.upd_ne (h := by omega)]]
+    rw [hm5]; exact hinfo
+
+end NANO.C.Proofs
