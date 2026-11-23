@@ -28,6 +28,7 @@ import NANO.C.Proofs.NiBmpHeaderPalette
 import NANO.Bmp
 import NANO.Tga
 import NANO.TgaWrites
+import NANO.TgaArith
 import NANO.TgaGeometry
 import NANO.C.Proofs.Bmp
 import NANO.C.Proofs.NiBmpHeaderSpecPalette
