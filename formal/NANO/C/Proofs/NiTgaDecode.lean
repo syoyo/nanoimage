@@ -1245,3 +1245,42 @@ theorem ni_tga_l1hdr_ok (s : State) (bd : Nat) (dat : List UInt8) (hm : s.mem bd
     simp [s3, Locals.upd_same]
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem ni_tga_l1hdr_err (s : State) (dat : List UInt8) (l1 : s.locals 1 = some (.int u64 dat.length))
+    (off : Nat) (l7 : s.locals 7 = some (.int u64 off)) (hge : dat.length ≤ off) (hro : s.ro = false) :
+    ExS Gen.prog s tgaL1Hdr (.ret (some (.int i32 8))) s := by
+  have hge' : EvE Gen.prog s (.bin .ge (some u64) (.var 7) (.var 1)) (boolVal true) :=
+    EvE.bin (EvE.var l7) (EvE.var l1) (by rw [bin_u64_ge, decide_eq_true hge])
+  exact ExS.seq_ret (ExS.ite (bc := true) hge' (by simp [truthy_boolVal]) (ExS.ret (EvE.const (v := .int i32 8))))
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem ni_tga_l1chk_ok (s : State) (count npx pidx : Nat)
+    (l10 : s.locals 10 = some (.int u64 count)) (l5 : s.locals 5 = some (.int u64 npx))
+    (l6 : s.locals 6 = some (.int u64 pidx)) (hle : pidx ≤ npx)
+    (hok : count ≤ npx - pidx) (hro : s.ro = false) :
+    ExS Gen.prog s tgaL1Chk .normal s := by
+  have hsub : EvE Gen.prog s (.bin .sub (some u64) (.var 5) (.var 6)) (.int u64 (npx - pidx)) :=
+    EvE.bin (EvE.var l5) (EvE.var l6) (bin_u64_sub npx pidx hle)
+  have hgt : EvE Gen.prog s (.bin .gt (some u64) (.var 10) (.bin .sub (some u64) (.var 5) (.var 6))) (boolVal false) :=
+    EvE.bin (EvE.var l10) hsub (by rw [bin_u64_gt, decide_eq_false (by omega)])
+  exact ExS.ite (bc := false) hgt (by simp [truthy_boolVal]) ExS.skip
+
+theorem ni_tga_l1chk_err (s : State) (count npx pidx : Nat)
+    (l10 : s.locals 10 = some (.int u64 count)) (l5 : s.locals 5 = some (.int u64 npx))
+    (l6 : s.locals 6 = some (.int u64 pidx)) (hle : pidx ≤ npx)
+    (hbad : npx - pidx < count) (hro : s.ro = false) :
+    ExS Gen.prog s tgaL1Chk (.ret (some (.int i32 9))) s := by
+  have hsub : EvE Gen.prog s (.bin .sub (some u64) (.var 5) (.var 6)) (.int u64 (npx - pidx)) :=
+    EvE.bin (EvE.var l5) (EvE.var l6) (bin_u64_sub npx pidx hle)
+  have hgt : EvE Gen.prog s (.bin .gt (some u64) (.var 10) (.bin .sub (some u64) (.var 5) (.var 6))) (boolVal true) :=
+    EvE.bin (EvE.var l10) hsub (by rw [bin_u64_gt, decide_eq_true (by omega)])
+  exact ExS.ite (bc := true) hgt (by simp [truthy_boolVal]) (ExS.ret (EvE.const (v := .int i32 9)))
+
+end NANO.C.Proofs
