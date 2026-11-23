@@ -106,3 +106,23 @@ theorem tgaWriteAt_append (buf : List UInt8) (i : Nat) (bs cs : List UInt8)
   rw [htake, hdrop]
 
 end NANO
+
+namespace NANO
+open NANO
+
+/-- Fold `i` successive writes of the same bytes at the RLE pixel offsets. -/
+def tgaFoldI (obl : List UInt8) (h : TgaInfo) (p0 : Nat) (bytes : List UInt8) : Nat → List UInt8
+  | 0 => obl
+  | i + 1 => tgaWriteAt (tgaFoldI obl h p0 bytes i) (tgaDstIndex h (p0 + i), bytes)
+
+theorem tgaFoldI_succ (obl : List UInt8) (h : TgaInfo) (p0 : Nat) (bytes : List UInt8) (i : Nat) :
+    tgaFoldI obl h p0 bytes (i + 1)
+      = tgaWriteAt (tgaFoldI obl h p0 bytes i) (tgaDstIndex h (p0 + i), bytes) := rfl
+
+theorem tgaFoldI_length (obl : List UInt8) (h : TgaInfo) (p0 : Nat) (bytes : List UInt8) (i : Nat) :
+    (tgaFoldI obl h p0 bytes i).length = obl.length := by
+  induction i with
+  | zero => rfl
+  | succ i ih => rw [tgaFoldI_succ, tgaWriteAt_length, ih]
+
+end NANO
