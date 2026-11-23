@@ -1202,3 +1202,46 @@ abbrev tgaL1PreFrame (cont : Stmt) : Stmt :=
 theorem tgaL1Big_eq : tgaL1Big = tgaL1PreFrame (.seq (.set 16 (.cast u64 (.const (.int u32 0)))) tgaLoop0) := rfl
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem ni_tga_l1hdr_ok (s : State) (bd : Nat) (dat : List UInt8) (hm : s.mem bd = some dat)
+    (l0 : s.locals 0 = some (.ptr bd 0)) (l1 : s.locals 1 = some (.int u64 dat.length))
+    (off : Nat) (l7 : s.locals 7 = some (.int u64 off)) (hlt : off < dat.length) (hdat64 : dat.length < 2 ^ 64)
+    (hro : s.ro = false) :
+    ∃ s', ExS Gen.prog s tgaL1Hdr .normal s' ∧
+      s'.locals 11 = some (.int u8 (byteAt dat off)) ∧
+      s'.locals 7 = some (.int u64 (off + 1)) ∧
+      s'.locals 10 = some (.int u64 ((byteAt dat off &&& 127) + 1)) := by
+  have hge : EvE Gen.prog s (.bin .ge (some u64) (.var 7) (.var 1)) (boolVal false) :=
+    EvE.bin (EvE.var l7) (EvE.var l1) (by rw [bin_u64_ge, decide_eq_false (by omega)])
+  have hguard : ExS Gen.prog s (.ite (.bin .ge (some u64) (.var 7) (.var 1)) (.ret (some (.const (.int i32 8)))) .skip) .normal s :=
+    ExS.ite (bc := false) hge (by simp [truthy_boolVal]) ExS.skip
+  have hrd : EvE Gen.prog s (.load (.int u8) (.index (.var 0) (.var 7) 1)) (.int u8 (byteAt dat off)) :=
+    EvE.load (EvE.index (EvE.var l0) (EvE.var l7) (ptrAddN_ok hm (by omega)))
+      (by simpa using load_byte_dyn s.mem bd dat hm off hlt)
+  let s1 : State := { s with locals := s.locals.upd 11 (.int u8 (byteAt dat off)) }
+  have e11 : ExS Gen.prog s (.set 11 (.load (.int u8) (.index (.var 0) (.var 7) 1))) .normal s1 := ExS.set hrd
+  have l7_1 : s1.locals 7 = some (.int u64 off) := by simp [s1, Locals.upd_ne, l7]
+  have h7 : EvE Gen.prog s1 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 7)) (.cast u64 (.cast u64 (.const (.int u32 1)))))) (.int u64 (off + 1)) :=
+    EvE.cast (EvE.bin (EvE.cast (EvE.var l7_1) (u64_u64_cast off (by omega)))
+      (EvE.cast (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (u64_u64_cast 1 (by omega)))
+      (bin_u64_add off 1 (by omega))) (u64_u64_cast (off + 1) (by omega))
+  let s2 : State := { s1 with locals := s1.locals.upd 7 (.int u64 (off + 1)) }
+  have e7 : ExS Gen.prog s1 (.set 7 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 7)) (.cast u64 (.cast u64 (.const (.int u32 1))))))) .normal s2 := ExS.set h7
+  have l11_2 : s2.locals 11 = some (.int u8 (byteAt dat off)) := by simp [s2, Locals.upd_ne, s1, Locals.upd_ne]
+  have h10 : EvE Gen.prog s2 (.bin .add (some u64) (.cast u64 (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 127)))) (.cast u64 (.const (.int u32 1)))) (.int u64 ((byteAt dat off &&& 127) + 1)) :=
+    EvE.bin (EvE.cast (EvE.bin (EvE.cast (EvE.var l11_2) (u8_u32_cast (byteAt dat off) (byteAt_lt _ _))) (EvE.const (v := .int u32 127)) (bin_u32_band (byteAt dat off) 127)) (u32_u64_cast (byteAt dat off &&& 127) (by have := Nat.and_le_right (n := byteAt dat off) (m := 127); omega)))
+      (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega))) (bin_u64_add (byteAt dat off &&& 127) 1 (by have := Nat.and_le_right (n := byteAt dat off) (m := 127); omega))
+  let s3 : State := { s2 with locals := s2.locals.upd 10 (.int u64 ((byteAt dat off &&& 127) + 1)) }
+  have e10 : ExS Gen.prog s2 (.set 10 (.bin .add (some u64) (.cast u64 (.bin .band (some u32) (.cast u32 (.var 11)) (.const (.int u32 127)))) (.cast u64 (.const (.int u32 1))))) .normal s3 := ExS.set h10
+  refine ⟨s3, ExS.seq hguard (ExS.seq e11 (ExS.seq e7 e10)), ?_, ?_, ?_⟩
+  · show s3.locals 11 = some (.int u8 (byteAt dat off))
+    simp [s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s3.locals 7 = some (.int u64 (off + 1))
+    simp [s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s3.locals 10 = some (.int u64 ((byteAt dat off &&& 127) + 1))
+    simp [s3, Locals.upd_same]
+
+end NANO.C.Proofs
