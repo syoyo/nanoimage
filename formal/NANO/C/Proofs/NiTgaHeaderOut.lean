@@ -12,6 +12,7 @@ import NANO.C.Proofs.NiGeometryTail
 import NANO.C.Proofs.NiTgaHeader
 import NANO.C.Proofs.NiTgaHeaderBody
 import NANO.C.Proofs.NiTgaHeaderStores
+import NANO.C.Proofs.NiTgaHeaderSpecCode
 import NANO.C.Proofs.NiTgaHeaderGates
 
 set_option linter.unusedVariables false
@@ -187,5 +188,254 @@ theorem tgaHeader_rest_exs (m : Mem) (d : List UInt8) (size : Nat) (obl : List U
       refine ⟨⟨l, m, ro⟩, ?_, (fun j _ => rfl), ?_⟩
       · rw [hc]; exact ExS.seq hskipId (ExS.seq_ret hite)
       · simp only [hs_m1 hidg hm1f]
+
+end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+theorem tgaHeader_tail_exs (m : Mem) (d : List UInt8) (size : Nat) (obl : List UInt8)
+    (hob : m 3 = some obl) (h32 : obl.length = 32) (ro : Bool) (hro : ro = false)
+    (hsz : ¬ size < 18) (l : Locals)
+    (l1 : l 1 = some (.int u64 size)) (l2 : l 2 = some (.ptr 3 0))
+    (l3 : l 3 = some (.int u8 (byteAt d 0))) (l4 : l 4 = some (.int u8 (byteAt d 1)))
+    (l5 : l 5 = some (.int u8 (byteAt d 2))) (l6 : l 6 = some (.int u16 (rd16le d 12)))
+    (l7 : l 7 = some (.int u16 (rd16le d 14))) (l8 : l 8 = some (.int u8 (byteAt d 16)))
+    (l9 : l 9 = some (.int u8 (byteAt d 17))) :
+    ∃ s', ExS Gen.prog (⟨l, m, ro⟩ : State) tgaTail
+        (.ret (some (.int i32 (tgaHeaderCode size d)))) s' ∧
+      (∀ j, j ≠ 3 → s'.mem j = m j) ∧
+      (match tgaHeader size d with
+       | .ok h => s'.mem 3 = some (tgaHeaderBlock obl h)
+       | .error _ => True) := by
+  have x_tt : truthy (boolVal true) = .ok true := truthy_boolVal true
+  have x_tf : truthy (boolVal false) = .ok false := truthy_boolVal false
+  have hww := rd16le_lt d 12
+  have hhh := rd16le_lt d 14
+  have hid := byteAt_lt d 0
+  have hb1 := byteAt_lt d 1
+  have hb2 := byteAt_lt d 2
+  have hpd := byteAt_lt d 16
+  have hde := byteAt_lt d 17
+  have evD := ev_tga_dims (⟨l, m, ro⟩ : State) (rd16le d 12) (rd16le d 14) l6 l7 hww hhh
+  by_cases hdim : rd16le d 12 = 0 ∨ rd16le d 14 = 0
+  case pos =>
+    have hB : (decide (rd16le d 12 = 0) || decide (rd16le d 14 = 0)) = true := by
+      rcases hdim with h | h <;> simp [h]
+    rw [hB] at evD
+    have hite : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaDims (.ret (some (.int i32 2))) (⟨l, m, ro⟩ : State) :=
+      ExS.ite evD x_tt (ExS.ret (EvE.const (v := .int i32 2)))
+    exact ⟨⟨l, m, ro⟩, (by rw [tgaCode_dims d size hsz hdim]; exact ExS.seq_ret hite), (fun j _ => rfl), (by simp [tgaHeader_dims d size hsz hdim])⟩
+  case neg =>
+    have hdimN : ¬ (rd16le d 12 = 0 ∨ rd16le d 14 = 0) := hdim
+    have hB : (decide (rd16le d 12 = 0) || decide (rd16le d 14 = 0)) = false := by
+      rw [show decide (rd16le d 12 = 0) = false from decide_eq_false_iff_not.mpr (fun h => hdim (Or.inl h)),
+          show decide (rd16le d 14 = 0) = false from decide_eq_false_iff_not.mpr (fun h => hdim (Or.inr h))]
+      rfl
+    rw [hB] at evD
+    have hskipD : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaDims .normal (⟨l, m, ro⟩ : State) :=
+      ExS.ite evD x_tf ExS.skip
+    have evC := ev_tga_cmap (⟨l, m, ro⟩ : State) (byteAt d 1) l4 hb1
+    by_cases hcm : byteAt d 1 = 0
+    case pos =>
+      have hBc : decide (byteAt d 1 ≠ 0) = false := by simp [hcm]
+      rw [hBc] at evC
+      have hskipC : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaCmap .normal (⟨l, m, ro⟩ : State) :=
+        ExS.ite evC x_tf ExS.skip
+      have evT := ev_tga_badtype (⟨l, m, ro⟩ : State) (byteAt d 2) l5 hb2
+      by_cases hbad : ¬ byteAt d 2 = 2 ∧ ¬ byteAt d 2 = 3 ∧ ¬ byteAt d 2 = 10 ∧ ¬ byteAt d 2 = 11
+      case pos =>
+        have hBt : (decide (byteAt d 2 ≠ 2) && decide (byteAt d 2 ≠ 3) && decide (byteAt d 2 ≠ 10) && decide (byteAt d 2 ≠ 11)) = true := by
+          simp [hbad.1, hbad.2.1, hbad.2.2.1, hbad.2.2.2]
+        rw [hBt] at evT
+        have hite : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaBadType (.ret (some (.int i32 4))) (⟨l, m, ro⟩ : State) :=
+          ExS.ite evT x_tt (ExS.ret (EvE.const (v := .int i32 4)))
+        exact ⟨⟨l, m, ro⟩, (by rw [tgaCode_badtype d size hsz hdimN hcm hbad]; exact ExS.seq hskipD (ExS.seq hskipC (ExS.seq_ret hite))), (fun j _ => rfl), (by simp [tgaHeader_badtype d size hsz hdimN hcm hbad])⟩
+      case neg =>
+        have hvalid : ¬ (¬ byteAt d 2 = 2 ∧ ¬ byteAt d 2 = 3 ∧ ¬ byteAt d 2 = 10 ∧ ¬ byteAt d 2 = 11) := hbad
+        have hBt : (decide (byteAt d 2 ≠ 2) && decide (byteAt d 2 ≠ 3) && decide (byteAt d 2 ≠ 10) && decide (byteAt d 2 ≠ 11)) = false := by
+          by_cases h2 : byteAt d 2 = 2
+          · simp [h2]
+          · by_cases h3 : byteAt d 2 = 3
+            · simp [h3]
+            · by_cases h10 : byteAt d 2 = 10
+              · simp [h10]
+              · by_cases h11 : byteAt d 2 = 11
+                · simp [h11]
+                · exact absurd ⟨h2, h3, h10, h11⟩ hbad
+        rw [hBt] at evT
+        have hskipT : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaBadType .normal (⟨l, m, ro⟩ : State) :=
+          ExS.ite evT x_tf ExS.skip
+        have evCh := ev_tga_chanbranch (⟨l, m, ro⟩ : State) (byteAt d 2) l5 hb2
+        by_cases hchan : byteAt d 2 = 3 ∨ byteAt d 2 = 11
+        case pos =>
+          have hBch : (decide (byteAt d 2 = 3) || decide (byteAt d 2 = 11)) = true := by
+            rcases hchan with h | h <;> simp [h]
+          rw [hBch] at evCh
+          have evP8 := ev_tga_pd8 (⟨l, m, ro⟩ : State) (byteAt d 16) l8 hpd
+          by_cases hpd8 : byteAt d 16 = 8
+          case pos =>
+            have hBp : decide (byteAt d 16 ≠ 8) = false := by simp [hpd8]
+            rw [hBp] at evP8
+            let lC : Locals := l.upd 10 (.int u8 1)
+            have hset : ExS Gen.prog (⟨l, m, ro⟩ : State) (.set 10 (.cast u8 (.const (.int u32 1)))) .normal (⟨lC, m, ro⟩ : State) :=
+              ExS.set (EvE.cast (EvE.const (v := .int u32 1)) (u32_u8_cast 1 (by omega)))
+            have hChan : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaChannels .normal (⟨lC, m, ro⟩ : State) :=
+              ExS.ite evCh x_tt (ExS.seq (ExS.ite evP8 x_tf ExS.skip) hset)
+            have lC1 : lC 1 = some (.int u64 size) := by simp only [lC, Locals.upd_ne]; exact l1
+            have lC2 : lC 2 = some (.ptr 3 0) := by simp only [lC, Locals.upd_ne]; exact l2
+            have lC3 : lC 3 = some (.int u8 (byteAt d 0)) := by simp only [lC, Locals.upd_ne]; exact l3
+            have lC5 : lC 5 = some (.int u8 (byteAt d 2)) := by simp only [lC, Locals.upd_ne]; exact l5
+            have lC6 : lC 6 = some (.int u16 (rd16le d 12)) := by simp only [lC, Locals.upd_ne]; exact l6
+            have lC7 : lC 7 = some (.int u16 (rd16le d 14)) := by simp only [lC, Locals.upd_ne]; exact l7
+            have lC9 : lC 9 = some (.int u8 (byteAt d 17)) := by simp only [lC, Locals.upd_ne]; exact l9
+            have lC10 : lC 10 = some (.int u8 1) := by simp only [lC]; exact Locals.upd_same l 10 _
+            obtain ⟨s', hrest, hmem, hblk⟩ := tgaHeader_rest_exs m d size obl hob h32 ro hro 1 (by omega) lC
+              lC1 lC2 lC3 lC5 lC6 lC7 lC9 lC10 hww hhh hid hb2 hde (by omega)
+              (fun hidg hm1 hm2 => tgaHeader_ok1 d size hsz hdimN hcm hvalid hchan hpd8 hidg hm1 hm2)
+              (fun hidg => by
+                unfold tgaHeader
+                simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                  if_neg hvalid, if_pos hchan, if_neg (by simp [hpd8] : ¬ (byteAt d 16 ≠ 8)),
+                  if_pos hidg, Except.bind, Bind.bind, pure, Except.pure, id]
+                rfl)
+              (fun hidgN hm1f => by
+                unfold tgaHeader
+                simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                  if_neg hvalid, if_pos hchan, if_neg (by simp [hpd8] : ¬ (byteAt d 16 ≠ 8)),
+                  if_neg hidgN, if_pos (by rw [hm1f]; decide : (! sizeMulOK (rd16le d 12) (rd16le d 14)) = true),
+                  Except.bind, Bind.bind, pure, Except.pure, id]
+                rfl)
+              (fun hidgN hm1 hm2f => by
+                unfold tgaHeader
+                simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                  if_neg hvalid, if_pos hchan, if_neg (by simp [hpd8] : ¬ (byteAt d 16 ≠ 8)),
+                  if_neg hidgN, if_neg (by rw [hm1]; decide : ¬ ((! sizeMulOK (rd16le d 12) (rd16le d 14)) = true)),
+                  if_pos (by rw [hm2f]; decide : (! sizeMulOK (rd16le d 12 * rd16le d 14) 1) = true),
+                  Except.bind, Bind.bind, pure, Except.pure, id]
+                rfl)
+            exact ⟨s', (by exact ExS.seq hskipD (ExS.seq hskipC (ExS.seq hskipT (ExS.seq hChan hrest)))), hmem, hblk⟩
+          case neg =>
+            have hBp : decide (byteAt d 16 ≠ 8) = true := by simp [hpd8]
+            rw [hBp] at evP8
+            have hiteP : ExS Gen.prog (⟨l, m, ro⟩ : State) (.ite (.bin .ne (some u32) (.cast u32 (.var 8)) (.const (.int u32 8))) (.ret (some (.const (.int i32 5)))) .skip) (.ret (some (.int i32 5))) (⟨l, m, ro⟩ : State) :=
+              ExS.ite evP8 x_tt (ExS.ret (EvE.const (v := .int i32 5)))
+            have hChan : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaChannels (.ret (some (.int i32 5))) (⟨l, m, ro⟩ : State) :=
+              ExS.ite evCh x_tt (ExS.seq_ret hiteP)
+            exact ⟨⟨l, m, ro⟩, (by rw [tgaCode_depth1 d size hsz hdimN hcm hvalid hchan hpd8]; exact ExS.seq hskipD (ExS.seq hskipC (ExS.seq hskipT (ExS.seq_ret hChan)))), (fun j _ => rfl), (by simp [tgaHeader_depth1 d size hsz hdimN hcm hvalid hchan hpd8])⟩
+        case neg =>
+          have hBchF : (decide (byteAt d 2 = 3) || decide (byteAt d 2 = 11)) = false := by
+            rw [show decide (byteAt d 2 = 3) = false from decide_eq_false_iff_not.mpr (fun h => hchan (Or.inl h)),
+                show decide (byteAt d 2 = 11) = false from decide_eq_false_iff_not.mpr (fun h => hchan (Or.inr h))]
+            rfl
+          rw [hBchF] at evCh
+          have evP24 := ev_tga_pd24 (⟨l, m, ro⟩ : State) (byteAt d 16) l8 hpd
+          by_cases hpd24 : byteAt d 16 = 24
+          case pos =>
+            have hB24 : decide (byteAt d 16 = 24) = true := by simp [hpd24]
+            rw [hB24] at evP24
+            let lC : Locals := l.upd 10 (.int u8 3)
+            have hset : ExS Gen.prog (⟨l, m, ro⟩ : State) (.set 10 (.cast u8 (.const (.int u32 3)))) .normal (⟨lC, m, ro⟩ : State) :=
+              ExS.set (EvE.cast (EvE.const (v := .int u32 3)) (u32_u8_cast 3 (by omega)))
+            have hChan : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaChannels .normal (⟨lC, m, ro⟩ : State) :=
+              ExS.ite evCh x_tf (ExS.ite evP24 x_tt hset)
+            have lC1 : lC 1 = some (.int u64 size) := by simp only [lC, Locals.upd_ne]; exact l1
+            have lC2 : lC 2 = some (.ptr 3 0) := by simp only [lC, Locals.upd_ne]; exact l2
+            have lC3 : lC 3 = some (.int u8 (byteAt d 0)) := by simp only [lC, Locals.upd_ne]; exact l3
+            have lC5 : lC 5 = some (.int u8 (byteAt d 2)) := by simp only [lC, Locals.upd_ne]; exact l5
+            have lC6 : lC 6 = some (.int u16 (rd16le d 12)) := by simp only [lC, Locals.upd_ne]; exact l6
+            have lC7 : lC 7 = some (.int u16 (rd16le d 14)) := by simp only [lC, Locals.upd_ne]; exact l7
+            have lC9 : lC 9 = some (.int u8 (byteAt d 17)) := by simp only [lC, Locals.upd_ne]; exact l9
+            have lC10 : lC 10 = some (.int u8 3) := by simp only [lC]; exact Locals.upd_same l 10 _
+            obtain ⟨s', hrest, hmem, hblk⟩ := tgaHeader_rest_exs m d size obl hob h32 ro hro 3 (by omega) lC
+              lC1 lC2 lC3 lC5 lC6 lC7 lC9 lC10 hww hhh hid hb2 hde (by omega)
+              (fun hidg hm1 hm2 => tgaHeader_ok3 d size hsz hdimN hcm hvalid hchan hpd24 hidg hm1 hm2)
+              (fun hidg => by
+                unfold tgaHeader
+                simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                  if_neg hvalid, if_neg hchan, if_pos hpd24, if_pos hidg,
+                  Except.bind, Bind.bind, pure, Except.pure, id]
+                rfl)
+              (fun hidgN hm1f => by
+                unfold tgaHeader
+                simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                  if_neg hvalid, if_neg hchan, if_pos hpd24, if_neg hidgN,
+                  if_pos (by rw [hm1f]; decide : (! sizeMulOK (rd16le d 12) (rd16le d 14)) = true),
+                  Except.bind, Bind.bind, pure, Except.pure, id]
+                rfl)
+              (fun hidgN hm1 hm2f => by
+                unfold tgaHeader
+                simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                  if_neg hvalid, if_neg hchan, if_pos hpd24, if_neg hidgN,
+                  if_neg (by rw [hm1]; decide : ¬ ((! sizeMulOK (rd16le d 12) (rd16le d 14)) = true)),
+                  if_pos (by rw [hm2f]; decide : (! sizeMulOK (rd16le d 12 * rd16le d 14) 3) = true),
+                  Except.bind, Bind.bind, pure, Except.pure, id]
+                rfl)
+            exact ⟨s', (by exact ExS.seq hskipD (ExS.seq hskipC (ExS.seq hskipT (ExS.seq hChan hrest)))), hmem, hblk⟩
+          case neg =>
+            have hB24 : decide (byteAt d 16 = 24) = false := by simp [hpd24]
+            rw [hB24] at evP24
+            have evP32 := ev_tga_pd32 (⟨l, m, ro⟩ : State) (byteAt d 16) l8 hpd
+            by_cases hpd32 : byteAt d 16 = 32
+            case pos =>
+              have hB32 : decide (byteAt d 16 = 32) = true := by simp [hpd32]
+              rw [hB32] at evP32
+              let lC : Locals := l.upd 10 (.int u8 4)
+              have hset : ExS Gen.prog (⟨l, m, ro⟩ : State) (.set 10 (.cast u8 (.const (.int u32 4)))) .normal (⟨lC, m, ro⟩ : State) :=
+                ExS.set (EvE.cast (EvE.const (v := .int u32 4)) (u32_u8_cast 4 (by omega)))
+              have hChan : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaChannels .normal (⟨lC, m, ro⟩ : State) :=
+                ExS.ite evCh x_tf (ExS.ite evP24 x_tf (ExS.ite evP32 x_tt hset))
+              have lC1 : lC 1 = some (.int u64 size) := by simp only [lC, Locals.upd_ne]; exact l1
+              have lC2 : lC 2 = some (.ptr 3 0) := by simp only [lC, Locals.upd_ne]; exact l2
+              have lC3 : lC 3 = some (.int u8 (byteAt d 0)) := by simp only [lC, Locals.upd_ne]; exact l3
+              have lC5 : lC 5 = some (.int u8 (byteAt d 2)) := by simp only [lC, Locals.upd_ne]; exact l5
+              have lC6 : lC 6 = some (.int u16 (rd16le d 12)) := by simp only [lC, Locals.upd_ne]; exact l6
+              have lC7 : lC 7 = some (.int u16 (rd16le d 14)) := by simp only [lC, Locals.upd_ne]; exact l7
+              have lC9 : lC 9 = some (.int u8 (byteAt d 17)) := by simp only [lC, Locals.upd_ne]; exact l9
+              have lC10 : lC 10 = some (.int u8 4) := by simp only [lC]; exact Locals.upd_same l 10 _
+              obtain ⟨s', hrest, hmem, hblk⟩ := tgaHeader_rest_exs m d size obl hob h32 ro hro 4 (by omega) lC
+                lC1 lC2 lC3 lC5 lC6 lC7 lC9 lC10 hww hhh hid hb2 hde (by omega)
+                (fun hidg hm1 hm2 => tgaHeader_ok4 d size hsz hdimN hcm hvalid hchan hpd32 hidg hm1 hm2)
+                (fun hidg => by
+                  unfold tgaHeader
+                  simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                    if_neg hvalid, if_neg hchan, if_neg (by simp [hpd24] : ¬ (byteAt d 16 = 24)),
+                    if_pos hpd32, if_pos hidg, Except.bind, Bind.bind, pure, Except.pure, id]
+                  rfl)
+                (fun hidgN hm1f => by
+                  unfold tgaHeader
+                  simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                    if_neg hvalid, if_neg hchan, if_neg (by simp [hpd24] : ¬ (byteAt d 16 = 24)),
+                    if_pos hpd32, if_neg hidgN,
+                    if_pos (by rw [hm1f]; decide : (! sizeMulOK (rd16le d 12) (rd16le d 14)) = true),
+                    Except.bind, Bind.bind, pure, Except.pure, id]
+                  rfl)
+                (fun hidgN hm1 hm2f => by
+                  unfold tgaHeader
+                  simp only [if_neg hsz, if_neg hdimN, if_neg (by simp [hcm] : ¬ (byteAt d 1 ≠ 0)),
+                    if_neg hvalid, if_neg hchan, if_neg (by simp [hpd24] : ¬ (byteAt d 16 = 24)),
+                    if_pos hpd32, if_neg hidgN,
+                    if_neg (by rw [hm1]; decide : ¬ ((! sizeMulOK (rd16le d 12) (rd16le d 14)) = true)),
+                    if_pos (by rw [hm2f]; decide : (! sizeMulOK (rd16le d 12 * rd16le d 14) 4) = true),
+                    Except.bind, Bind.bind, pure, Except.pure, id]
+                  rfl)
+              exact ⟨s', (by exact ExS.seq hskipD (ExS.seq hskipC (ExS.seq hskipT (ExS.seq hChan hrest)))), hmem, hblk⟩
+            case neg =>
+              have hB32 : decide (byteAt d 16 = 32) = false := by simp [hpd32]
+              rw [hB32] at evP32
+              have hiteInner : ExS Gen.prog (⟨l, m, ro⟩ : State) (.ite (.bin .eq (some u32) (.cast u32 (.var 8)) (.const (.int u32 32))) (.set 10 (.cast u8 (.const (.int u32 4)))) (.ret (some (.const (.int i32 5))))) (.ret (some (.int i32 5))) (⟨l, m, ro⟩ : State) :=
+                ExS.ite evP32 x_tf (ExS.ret (EvE.const (v := .int i32 5)))
+              have hite24 : ExS Gen.prog (⟨l, m, ro⟩ : State) (.ite (.bin .eq (some u32) (.cast u32 (.var 8)) (.const (.int u32 24))) (.set 10 (.cast u8 (.const (.int u32 3)))) _) (.ret (some (.int i32 5))) (⟨l, m, ro⟩ : State) :=
+                ExS.ite evP24 x_tf hiteInner
+              have hChan : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaChannels (.ret (some (.int i32 5))) (⟨l, m, ro⟩ : State) :=
+                ExS.ite evCh x_tf hite24
+              exact ⟨⟨l, m, ro⟩, (by rw [tgaCode_depth2 d size hsz hdimN hcm hvalid hchan hpd24 hpd32]; exact ExS.seq hskipD (ExS.seq hskipC (ExS.seq hskipT (ExS.seq_ret hChan)))), (fun j _ => rfl), (by simp [tgaHeader_depth2 d size hsz hdimN hcm hvalid hchan hpd24 hpd32])⟩
+    case neg =>
+      have hcmn : byteAt d 1 ≠ 0 := hcm
+      have hBc : decide (byteAt d 1 ≠ 0) = true := by simp [hcmn]
+      rw [hBc] at evC
+      have hite : ExS Gen.prog (⟨l, m, ro⟩ : State) tgaCmap (.ret (some (.int i32 3))) (⟨l, m, ro⟩ : State) :=
+        ExS.ite evC x_tt (ExS.ret (EvE.const (v := .int i32 3)))
+      exact ⟨⟨l, m, ro⟩, (by rw [tgaCode_cmap d size hsz hdimN hcmn]; exact ExS.seq hskipD (ExS.seq_ret hite)), (fun j _ => rfl), (by simp [tgaHeader_cmap d size hsz hdimN hcmn])⟩
 
 end NANO.C.Proofs
