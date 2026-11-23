@@ -1540,4 +1540,94 @@ def TgaL1Inv (s : State) (h : TgaInfo) (npx ob bd : Nat) (obl info dat : List UI
   s.mem ob = some obl ∧ s.mem 3 = some info ∧ s.mem bd = some dat ∧
   s.ro = false ∧ pidx ≤ npx
 
+
+theorem ni_tga_l1step_rle0 (s : State) (h : TgaInfo) (npx ob bd : Nat) (obl info dat : List UInt8) (pidx off : Nat)
+    (hinv : TgaL1Inv s h npx ob bd obl info dat pidx off) (hpn : pidx < npx) (hrle0 : h.rle = 0)
+    (hch : h.channels < 256) (hcp : 0 < h.channels) (hdat64 : dat.length < 2 ^ 64) (hob3 : ob ≠ 3) (hbd3 : bd ≠ 3) (hbdo : bd ≠ ob)
+    (hb : off + h.channels ≤ dat.length) (h64 : off + h.channels < 2 ^ 64) (hlob : obl.length < 2 ^ 64)
+    (h32 : info.length = 32) (hcount64 : npx < 2 ^ 64)
+    (hl16 : load s.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load s.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl26 : load s.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load s.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hbnd : ∀ p, p < pidx + 1 → TgaPixelBounds h p)
+    (hwbf : ∀ p, p < pidx + 1 → tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat off)) (UInt8.ofNat (if 1 < h.channels then byteAt dat (off + 1) else 0)) (UInt8.ofNat (if 2 < h.channels then byteAt dat (off + 2) else 0)) (UInt8.ofNat (if 3 < h.channels then byteAt dat (off + 3) else 255))).length ≤ obl.length)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    ∃ s', ExS Gen.prog s (.ite (.bin .lt (some u64) (.var 6) (.var 5)) tgaL1Big .brk) .normal s' ∧
+      TgaL1Inv s' h npx ob bd (tgaFoldI obl h pidx (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat off)) (UInt8.ofNat (if 1 < h.channels then byteAt dat (off + 1) else 0)) (UInt8.ofNat (if 2 < h.channels then byteAt dat (off + 2) else 0)) (UInt8.ofNat (if 3 < h.channels then byteAt dat (off + 3) else 255))) 1) info dat (pidx + 1) (off + h.channels) := by
+  obtain ⟨l5, l6, l7, l8, l9, l0, l1, l2, l3, hmob, hinfo, hmemdat, hro, hle⟩ := hinv
+  let b0 := byteAt dat off
+  let b1 := if 1 < h.channels then byteAt dat (off + 1) else 0
+  let b2 := if 2 < h.channels then byteAt dat (off + 2) else 0
+  let b3 := if 3 < h.channels then byteAt dat (off + 3) else 255
+  let post := tgaL1PreRle0Post s dat off h.channels
+  let post16 : State := { post with locals := post.locals.upd 16 (.int u64 0) }
+  have e16 : ExS Gen.prog post (.set 16 (.cast u64 (.const (.int u32 0)))) .normal post16 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u64_u64_cast 0 (by omega)))
+  have hmem16 : post16.mem = s.mem := by simp [post16, post, tgaL1PreRle0Post]
+  have inv16 : TgaLoopInv post16 h pidx 1 npx ob bd obl info dat b0 b1 b2 b3 0 0 (off + h.channels) 0 := by
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · simp [post16, Locals.upd_same]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l6]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l5]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l0]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l1]
+    · simp only [post16, post, tgaL1PreRle0Post, tgaFoldI]; exact hmob
+    · simp only [post16, post, tgaL1PreRle0Post]; exact hinfo
+    · simp only [post16, post, tgaL1PreRle0Post]; exact hmemdat
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l2]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l3]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, Locals.upd_same]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l8]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, l9, hrle0]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, Locals.upd_same]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_ne, Locals.upd_same]
+    · simp [post16, post, tgaL1PreRle0Post, Locals.upd_same, Locals.upd_ne, b0]
+    · by_cases hc1 : 1 < h.channels <;> simp [post16, post, tgaL1PreRle0Post, b1, hc1, Locals.upd_ne, Locals.upd_same]
+    · by_cases hc2 : 2 < h.channels <;> simp [post16, post, tgaL1PreRle0Post, b2, hc2, Locals.upd_ne, Locals.upd_same]
+    · by_cases hc3 : 3 < h.channels <;> simp [post16, post, tgaL1PreRle0Post, b3, hc3, Locals.upd_ne, Locals.upd_same]
+    · simp only [post16, post, tgaL1PreRle0Post]; exact hro
+    · simp
+  have hb0 : b0 < 256 := by simp [b0]; exact byteAt_lt _ _
+  have hb1 : b1 < 256 := by
+    unfold b1
+    split
+    · exact byteAt_lt _ _
+    · omega
+  have hb2 : b2 < 256 := by
+    unfold b2
+    split
+    · exact byteAt_lt _ _
+    · omega
+  have hb3 : b3 < 256 := by
+    unfold b3
+    split
+    · exact byteAt_lt _ _
+    · omega
+  have hlen16 : load post16.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width) := by rw [hmem16]; exact hl16
+  have hl20' : load post16.mem (.int u32) (.ptr 3 20) = .ok (.int u32 h.height) := by rw [hmem16]; exact hl20
+  have hl26' : load post16.mem (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin) := by rw [hmem16]; exact hl26
+  have hl27' : load post16.mem (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin) := by rw [hmem16]; exact hl27
+  have hwb16 : ∀ p, p < pidx + 1 → tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length ≤ obl.length := by
+    intro p hp
+    have e : tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) = tgaPixelOut h.channels (UInt8.ofNat (byteAt dat off)) (UInt8.ofNat (if 1 < h.channels then byteAt dat (off + 1) else 0)) (UInt8.ofNat (if 2 < h.channels then byteAt dat (off + 2) else 0)) (UInt8.ofNat (if 3 < h.channels then byteAt dat (off + 3) else 255)) := rfl
+    rw [e]; exact hwbf p hp
+  obtain ⟨s', hloop0, inv'⟩ :=
+    ni_tga_loop0_rle post16 h pidx 1 npx ob bd obl info dat b0 b1 b2 b3 0 0 (off + h.channels) 0 inv16 h32 (by omega) (Or.inl rfl) (by omega) (by omega)
+      hlen16 hl20' hl26' hl27' hw32 hh32 hwpos hhpos hch hcp hro8 hto8 hwh64 hbnd hwb16 hc hb0 hb1 hb2 hb3 hlob hob3 hbdo
+  have hcont : ExS Gen.prog post (.seq (.set 16 (.cast u64 (.const (.int u32 0)))) tgaLoop0) .normal s' := ExS.seq e16 hloop0
+  have hpre : ExS Gen.prog s (tgaL1PreFrame (.seq (.set 16 (.cast u64 (.const (.int u32 0)))) tgaLoop0)) .normal s' :=
+    ni_tga_l1pre_rle0 s bd dat hmemdat l0 l1 off h.channels npx pidx l5 l6 l7 l8 (by show s.locals 9 = some (.int u8 0); rw [← hrle0]; exact l9) hch hcp hdat64 (by omega) (by omega) hb h64 hro (.seq (.set 16 (.cast u64 (.const (.int u32 0)))) tgaLoop0) .normal s' hcont
+  have hcond : EvE Gen.prog s (.bin .lt (some u64) (.var 6) (.var 5)) (boolVal true) :=
+    EvE.bin (EvE.var l6) (EvE.var l5) (by rw [bin_u64_lt, decide_eq_true hpn])
+  have hbody : ExS Gen.prog s (.ite (.bin .lt (some u64) (.var 6) (.var 5)) tgaL1Big .brk) .normal s' :=
+    ExS.ite (b := .brk) (bc := true) hcond (by simp [truthy_boolVal]) (by simpa [tgaL1Big_eq] using hpre)
+  refine ⟨s', hbody, ?_⟩
+  obtain ⟨k16, k6, k5, k0, k1, kob, k3, kb, k2, k3b, k7, k8, k9, k10, k11, k12, k13, k14, k15, kro, kle⟩ := inv'
+  refine ⟨k5, k6, k7, k8, ?_, k0, k1, k2, k3b, kob, k3, kb, kro, ?_⟩
+  · show s'.locals 9 = some (.int u8 h.rle); rw [hrle0]; exact k9
+  · show pidx + 1 ≤ npx; omega
+
 end NANO.C.Proofs
