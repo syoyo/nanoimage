@@ -33,4 +33,7 @@ theorem Locals.upd_of_eq (l : Locals) (i : Nat) (v : Val) (h : l i = some v) :
   · rw [if_pos hj, hj]; exact h.symm
   · rw [if_neg hj]
 
+theorem bin_u32_gt (n k : Nat) : evalBin .gt (some ⟨32, false⟩) (.int ⟨32, false⟩ n) (.int ⟨32, false⟩ k)
+    = .ok (boolVal (decide (n > k))) := rfl
+
 end NANO.C.Proofs
