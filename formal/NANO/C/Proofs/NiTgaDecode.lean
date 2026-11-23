@@ -1630,4 +1630,21 @@ theorem ni_tga_l1step_rle0 (s : State) (h : TgaInfo) (npx ob bd : Nat) (obl info
   · show s'.locals 9 = some (.int u8 h.rle); rw [hrle0]; exact k9
   · show pidx + 1 ≤ npx; omega
 
+
+theorem tgaFoldI_raw_eq (obl0 : List UInt8) (h : TgaInfo) (p0 off0 : Nat) (dat : List UInt8) (j : Nat)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    tgaFoldI (tgaFoldRaw obl0 h p0 off0 h.channels dat j) h (p0 + j)
+      (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + j * h.channels)))
+        (UInt8.ofNat (if 1 < h.channels then byteAt dat (off0 + j * h.channels + 1) else 0))
+        (UInt8.ofNat (if 2 < h.channels then byteAt dat (off0 + j * h.channels + 2) else 0))
+        (UInt8.ofNat (if 3 < h.channels then byteAt dat (off0 + j * h.channels + 3) else 255))) 1
+    = tgaFoldRaw obl0 h p0 off0 h.channels dat (j + 1) := by
+  have e : tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + j * h.channels)))
+        (UInt8.ofNat (if 1 < h.channels then byteAt dat (off0 + j * h.channels + 1) else 0))
+        (UInt8.ofNat (if 2 < h.channels then byteAt dat (off0 + j * h.channels + 2) else 0))
+        (UInt8.ofNat (if 3 < h.channels then byteAt dat (off0 + j * h.channels + 3) else 255))
+      = tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + j * h.channels))) (UInt8.ofNat (byteAt dat (off0 + j * h.channels + 1))) (UInt8.ofNat (byteAt dat (off0 + j * h.channels + 2))) (UInt8.ofNat (byteAt dat (off0 + j * h.channels + 3))) :=
+    tgaPixelOut_raw h.channels 0 0 255 (byteAt dat (off0 + j * h.channels)) (byteAt dat (off0 + j * h.channels + 1)) (byteAt dat (off0 + j * h.channels + 2)) (byteAt dat (off0 + j * h.channels + 3)) hc
+  rw [e]
+  simp [tgaFoldI, tgaFoldRaw]
 end NANO.C.Proofs
