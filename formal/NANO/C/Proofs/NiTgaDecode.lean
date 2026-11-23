@@ -472,7 +472,8 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
       s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length)) ∧
       s'.mem 3 = some info ∧
       (∀ j, j ≠ 6 → j ≠ 17 → j ≠ 18 → j ≠ 19 → j ≠ 20 → j ≠ 26 → j ≠ 21 → j ≠ 22 → j ≠ 23 → j ≠ 24 → j ≠ 25 → s'.locals j = s.locals j) ∧
-      s'.ro = s.ro := by
+      s'.ro = s.ro ∧
+      (∀ j, j ≠ ob → s'.mem j = s.mem j) := by
   let s1 : State := { s with locals := s.locals.upd 17 (.int u8 b0) }
   let s2 : State := { s1 with locals := s1.locals.upd 18 (.int u8 b1) }
   let s3 : State := { s2 with locals := s2.locals.upd 19 (.int u8 b2) }
@@ -548,7 +549,7 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
     EvE.cast (EvE.bin e6 e1 (bin_u64_add p 1 hp1)) (u64_u64_cast (p + 1) hp1)
   let s7 : State := { s6 with locals := s6.locals.upd 6 (.int u64 (p + 1)) }
   have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
-  refine ⟨s7, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨s7, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- compose
     exact ExS.seq e17 (ExS.seq e18 (ExS.seq e19 (ExS.seq e20 (ExS.seq hskip (hframe (.seq tgaCall (.seq tgaWrCheck tgaPixelInc)) .normal s7 (ExS.seq hcall (ExS.seq hwr hinc)))))))
   · show s7.locals 6 = some (.int u64 (p + 1))
@@ -569,6 +570,11 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
     simp [s4, s3, s2, s1, Locals.upd_ne, h17, h18, h19, h20]
   · show s7.ro = s.ro
     rw [show s7.ro = s5.ro from rfl]; exact hro5
+  · intro j hj
+    show s7.mem j = s.mem j
+    rw [show s7.mem j = s6.mem j from rfl]
+    rw [show s6.mem j = s5.mem j from by simp [s6, Mem.upd, hj]]
+    rw [hm5]
 
 end NANO.C.Proofs
 
@@ -823,12 +829,14 @@ abbrev tgaLoop0 : Stmt :=
 
 /-- loop0 invariant: counter `i`, pixel index `p0+i`, buffer = `i` folded writes,
     info block and the loop's entry locals intact, `i ≤ count`. -/
-def TgaLoopInv (s : State) (h : TgaInfo) (p0 count ob : Nat) (obl info : List UInt8)
+def TgaLoopInv (s : State) (h : TgaInfo) (p0 count npx ob bd : Nat) (obl info dat : List UInt8)
     (b0 b1 b2 b3 rle hdr off i : Nat) : Prop :=
   s.locals 16 = some (.int u64 i) ∧
   s.locals 6 = some (.int u64 (p0 + i)) ∧
+  s.locals 5 = some (.int u64 npx) ∧
+  s.locals 0 = some (.ptr bd 0) ∧ s.locals 1 = some (.int u64 dat.length) ∧
   s.mem ob = some (tgaFoldI obl h p0 (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)) i) ∧
-  s.mem 3 = some info ∧
+  s.mem 3 = some info ∧ s.mem bd = some dat ∧
   s.locals 2 = some (.ptr 3 0) ∧ s.locals 3 = some (.ptr ob 0) ∧
   s.locals 7 = some (.int u64 off) ∧ s.locals 8 = some (.int u8 h.channels) ∧
   s.locals 9 = some (.int u8 rle) ∧ s.locals 10 = some (.int u64 count) ∧
@@ -842,9 +850,9 @@ end NANO.C.Proofs
 namespace NANO.C.Proofs
 open NANO NANO.C
 
-theorem ni_tga_loop0_step_rle (st : State) (h : TgaInfo) (p0 count ob : Nat) (obl info : List UInt8)
+theorem ni_tga_loop0_step_rle (st : State) (h : TgaInfo) (p0 count npx ob bd : Nat) (obl info dat : List UInt8)
     (b0 b1 b2 b3 rle hdr off i : Nat)
-    (hinv : TgaLoopInv st h p0 count ob obl info b0 b1 b2 b3 rle hdr off i)
+    (hinv : TgaLoopInv st h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off i)
     (hi : i < count) (hcount64 : count < 2 ^ 64) (h32 : info.length = 32)
     (hraw : rle = 0 ∨ (hdr &&& 128) ≠ 0) (hrle8 : rle < 256) (hhdr8 : hdr < 256)
     (hl16 : load st.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
@@ -860,19 +868,19 @@ theorem ni_tga_loop0_step_rle (st : State) (h : TgaInfo) (p0 count ob : Nat) (ob
     (hidx : (tgaDstY h (p0 + i) * h.width + tgaDstX h (p0 + i)) * h.channels < 2 ^ 64)
     (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
     (hb0 : b0 < 256) (hb1 : b1 < 256) (hb2 : b2 < 256) (hb3 : b3 < 256)
-    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3)
+    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) (hbdo : bd ≠ ob)
     (hwb : tgaDstIndex h (p0 + i) + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length ≤ obl.length) :
     ∃ st1 st2, ExS Gen.prog st (.ite (.bin .lt (some u64) (.var 16) (.var 10)) tgaPixelBody .brk) .normal st1 ∧
       ExS Gen.prog st1 tgaStep16 .normal st2 ∧
-      TgaLoopInv st2 h p0 count ob obl info b0 b1 b2 b3 rle hdr off (i + 1) := by
-  obtain ⟨h16, h6, hobM, hinfo, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hroM, hle⟩ := hinv
+      TgaLoopInv st2 h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off (i + 1) := by
+  obtain ⟨h16, h6, h5, h0, h1, hobM, hinfo, hmemdat, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hroM, hle⟩ := hinv
   have hcond : EvE Gen.prog st (.bin .lt (some u64) (.var 16) (.var 10)) (boolVal true) :=
     EvE.bin (EvE.var h16) (EvE.var h10) (by rw [bin_u64_lt, decide_eq_true hi])
   have hfold_lt : (tgaFoldI obl h p0 (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)) i).length < 2 ^ 64 := by
     rw [tgaFoldI_length]; exact hlob
   have hwb' : tgaDstIndex h (p0 + i) + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length ≤ (tgaFoldI obl h p0 (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)) i).length := by
     simpa [tgaFoldI_length] using hwb
-  obtain ⟨st1, hstep, h6', hob', hinfo', hpres, hro'⟩ :=
+  obtain ⟨st1, hstep, h6', hob', hinfo', hpres, hro', hmem⟩ :=
     ni_tga_pixel_step_rle st h (p0 + i) ob (tgaFoldI obl h p0 (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)) i)
       hobM hfold_lt hroM hob3 info hinfo h32 h2 h3 h6 h8 b0 b1 b2 b3 h12 h13 h14 h15 rle hdr h9 h11 hraw hrle8 hhdr8
       hl16 hl20 hl26 hl27 hw32 hh32 hwpos hhpos hpw hch hro8 hto8 hp hpp hwh64 hmul hadd hidx hc hb0 hb1 hb2 hb3 hwb'
@@ -888,14 +896,18 @@ theorem ni_tga_loop0_step_rle (st : State) (h : TgaInfo) (p0 count ob : Nat) (ob
   let st2 : State := { st1 with locals := st1.locals.upd 16 (.int u64 (i + 1)) }
   have hstep16 : ExS Gen.prog st1 tgaStep16 .normal st2 := ExS.set e16
   refine ⟨st1, st2, hbody, hstep16, ?_⟩
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · show st2.locals 16 = some (.int u64 (i + 1)); simp [st2, Locals.upd_same]
   · show st2.locals 6 = some (.int u64 (p0 + (i + 1)))
     rw [show st2.locals 6 = st1.locals 6 from by simp [st2, Locals.upd_ne], h6', show (p0 + i) + 1 = p0 + (i + 1) from by omega]
+  · show st2.locals 5 = some (.int u64 npx); rw [show st2.locals 5 = st1.locals 5 from by simp [st2, Locals.upd_ne], hpres 5 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h5
+  · show st2.locals 0 = some (.ptr bd 0); rw [show st2.locals 0 = st1.locals 0 from by simp [st2, Locals.upd_ne], hpres 0 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h0
+  · show st2.locals 1 = some (.int u64 dat.length); rw [show st2.locals 1 = st1.locals 1 from by simp [st2, Locals.upd_ne], hpres 1 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h1
   · show st2.mem ob = some (tgaFoldI obl h p0 (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)) (i + 1))
     rw [show st2.mem = st1.mem from rfl]
     rw [hob', tgaFoldI_succ, tgaWriteAt_eq _ _ _ hwb']
   · show st2.mem 3 = some info; rw [show st2.mem = st1.mem from rfl]; exact hinfo'
+  · show st2.mem bd = some dat; rw [show st2.mem = st1.mem from rfl]; rw [show st1.mem bd = st.mem bd from hmem bd (by omega)]; exact hmemdat
   · show st2.locals 2 = some (.ptr 3 0); rw [show st2.locals 2 = st1.locals 2 from by simp [st2, Locals.upd_ne], hpres 2 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h2
   · show st2.locals 3 = some (.ptr ob 0); rw [show st2.locals 3 = st1.locals 3 from by simp [st2, Locals.upd_ne], hpres 3 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h3
   · show st2.locals 7 = some (.int u64 off); rw [show st2.locals 7 = st1.locals 7 from by simp [st2, Locals.upd_ne], hpres 7 (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)]; exact h7
@@ -921,9 +933,9 @@ abbrev TgaPixelBounds (h : TgaInfo) (p : Nat) : Prop :=
   tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64 ∧
   (tgaDstY h p * h.width + tgaDstX h p) * h.channels < 2 ^ 64
 
-theorem ni_tga_loop0_rle (st0 : State) (h : TgaInfo) (p0 count ob : Nat) (obl info : List UInt8)
+theorem ni_tga_loop0_rle (st0 : State) (h : TgaInfo) (p0 count npx ob bd : Nat) (obl info dat : List UInt8)
     (b0 b1 b2 b3 rle hdr off i0 : Nat)
-    (hinv0 : TgaLoopInv st0 h p0 count ob obl info b0 b1 b2 b3 rle hdr off i0)
+    (hinv0 : TgaLoopInv st0 h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off i0)
     (h32 : info.length = 32) (hcount64 : count < 2 ^ 64)
     (hraw : rle = 0 ∨ (hdr &&& 128) ≠ 0) (hrle8 : rle < 256) (hhdr8 : hdr < 256)
     (hl16_0 : load st0.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
@@ -937,17 +949,17 @@ theorem ni_tga_loop0_rle (st0 : State) (h : TgaInfo) (p0 count ob : Nat) (obl in
     (hwbf : ∀ p, p < p0 + count → tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat b0) (UInt8.ofNat b1) (UInt8.ofNat b2) (UInt8.ofNat b3)).length ≤ obl.length)
     (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
     (hb0 : b0 < 256) (hb1 : b1 < 256) (hb2 : b2 < 256) (hb3 : b3 < 256)
-    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) :
-    ∃ st', ExS Gen.prog st0 tgaLoop0 .normal st' ∧ TgaLoopInv st' h p0 count ob obl info b0 b1 b2 b3 rle hdr off count := by
+    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) (hbdo : bd ≠ ob) :
+    ∃ st', ExS Gen.prog st0 tgaLoop0 .normal st' ∧ TgaLoopInv st' h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off count := by
   have hinv0' := hinv0
-  obtain ⟨_, _, _, hinfo0, _, _, _, _, _, _, _, _, _, _, _, _, _⟩ := hinv0'
-  have aux : ∀ (k : Nat) (st : State) (i : Nat), count - i = k → TgaLoopInv st h p0 count ob obl info b0 b1 b2 b3 rle hdr off i →
-      ∃ st', ExS Gen.prog st tgaLoop0 .normal st' ∧ TgaLoopInv st' h p0 count ob obl info b0 b1 b2 b3 rle hdr off count := by
+  obtain ⟨_, _, _, _, _, _, hinfo0, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩ := hinv0'
+  have aux : ∀ (k : Nat) (st : State) (i : Nat), count - i = k → TgaLoopInv st h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off i →
+      ∃ st', ExS Gen.prog st tgaLoop0 .normal st' ∧ TgaLoopInv st' h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off count := by
     intro k
     induction k with
     | zero =>
       intro st i hk hinv
-      obtain ⟨h16, h6, hobM, hinfo_st, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩ := hinv
+      obtain ⟨h16, h6, h5, h0, h1, hobM, hinfo_st, hmemdat, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩ := hinv
       have hieq : i = count := by omega
       have hlf : ¬ i < count := by omega
       have hcond : EvE Gen.prog st (.bin .lt (some u64) (.var 16) (.var 10)) (boolVal false) :=
@@ -955,11 +967,11 @@ theorem ni_tga_loop0_rle (st0 : State) (h : TgaInfo) (p0 count ob : Nat) (obl in
       have hb : ExS Gen.prog st (.ite (.bin .lt (some u64) (.var 16) (.var 10)) tgaPixelBody .brk) .brk st :=
         ExS.ite (bc := false) hcond (by simp [truthy_boolVal]) ExS.brk
       refine ⟨st, ExS.loop_brk hb, ?_⟩
-      have hinv_re : TgaLoopInv st h p0 count ob obl info b0 b1 b2 b3 rle hdr off i := ⟨h16, h6, hobM, hinfo_st, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩
+      have hinv_re : TgaLoopInv st h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off i := ⟨h16, h6, h5, h0, h1, hobM, hinfo_st, hmemdat, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩
       exact hieq ▸ hinv_re
     | succ k ih =>
       intro st i hk hinv
-      obtain ⟨h16, h6, hobM, hinfo_st, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩ := hinv
+      obtain ⟨h16, h6, h5, h0, h1, hobM, hinfo_st, hmemdat, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩ := hinv
       have hi : i < count := by omega
       have hmem3 : st.mem 3 = st0.mem 3 := by rw [hinfo_st, hinfo0]
       have hl16s : load st.mem (.int u32) (.ptr 3 16) = .ok (.int u32 h.width) := by
@@ -972,10 +984,10 @@ theorem ni_tga_loop0_rle (st0 : State) (h : TgaInfo) (p0 count ob : Nat) (obl in
         rw [← load_ptr_congr st0.mem st.mem 3 27 (.int u8) hmem3.symm]; exact hl27_0
       have hp_lt : p0 + i < p0 + count := by omega
       obtain ⟨hpw, hp, hpp, hmul, hadd, hidx⟩ := hbnd (p0 + i) hp_lt
-      have hinv_re : TgaLoopInv st h p0 count ob obl info b0 b1 b2 b3 rle hdr off i := ⟨h16, h6, hobM, hinfo_st, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩
+      have hinv_re : TgaLoopInv st h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off i := ⟨h16, h6, h5, h0, h1, hobM, hinfo_st, hmemdat, h2, h3, h7, h8, h9, h10, h11, h12, h13, h14, h15, hro_st, hle⟩
       obtain ⟨st1, st2, hb, hs, hinv2⟩ :=
-        ni_tga_loop0_step_rle st h p0 count ob obl info b0 b1 b2 b3 rle hdr off i hinv_re hi hcount64 h32 hraw hrle8 hhdr8
-          hl16s hl20s hl26s hl27s hw32 hh32 hwpos hhpos hpw hch hchp hro8 hto8 hp hpp hwh64 hmul hadd hidx hc hb0 hb1 hb2 hb3 hlob hob3 (hwbf (p0 + i) hp_lt)
+        ni_tga_loop0_step_rle st h p0 count npx ob bd obl info dat b0 b1 b2 b3 rle hdr off i hinv_re hi hcount64 h32 hraw hrle8 hhdr8
+          hl16s hl20s hl26s hl27s hw32 hh32 hwpos hhpos hpw hch hchp hro8 hto8 hp hpp hwh64 hmul hadd hidx hc hb0 hb1 hb2 hb3 hlob hob3 hbdo (hwbf (p0 + i) hp_lt)
       have hk' : count - (i + 1) = k := by omega
       obtain ⟨st', hrec, hinv'⟩ := ih st2 (i + 1) hk' hinv2
       exact ⟨st', ExS.loop_next hb (Or.inl rfl) hs hrec, hinv'⟩
@@ -1097,7 +1109,7 @@ theorem ni_tga_loop0_raw (st0 : State) (h : TgaInfo) (p0 count ob bd : Nat) (obl
     (hwbf : ∀ i, i < count → tgaDstIndex h (p0 + i) + (tgaPixelOut h.channels (UInt8.ofNat (byteAt dat (off0 + i * h.channels))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 1))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 2))) (UInt8.ofNat (byteAt dat (off0 + i * h.channels + 3)))).length ≤ obl.length)
     (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4)
     (hb0 : b0 < 256) (hb1 : b1 < 256) (hb2 : b2 < 256) (hb3 : b3 < 256)
-    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) :
+    (hlob : obl.length < 2 ^ 64) (hob3 : ob ≠ 3) (hbdo : bd ≠ ob) :
     ∃ st', ExS Gen.prog st0 tgaLoop0 .normal st' ∧ TgaLoopInvRaw st' h p0 count ob bd obl info dat b0 b1 b2 b3 rle hdr off0 count := by
   have hinv0' := hinv0
   obtain ⟨_, _, _, _, hinfo0, hmemdat0, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩ := hinv0'
