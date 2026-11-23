@@ -36,4 +36,5 @@ import NANO.C.Proofs.NiBmpLoop4
 import NANO.C.Proofs.NiBmpLoop5
 import NANO.C.Proofs.NiBmpDecodeInto
 import NANO.C.Proofs.NiBmpLoad
+import NANO.C.Proofs.NiTgaWritePixel
 
