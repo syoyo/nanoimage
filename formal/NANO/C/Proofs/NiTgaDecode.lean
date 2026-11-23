@@ -1406,4 +1406,44 @@ theorem ni_tga_l1bytes_err (s : State) (dat : List UInt8) (l1 : s.locals 1 = som
     EvE.bin hadd (EvE.var l1) (by rw [bin_u64_gt, decide_eq_true (by omega)])
   exact ExS.seq_ret (ExS.ite (bc := true) hgt (by simp [truthy_boolVal]) (ExS.ret (EvE.const (v := .int i32 10))))
 
+
+theorem ni_tga_l1set (s : State) :
+    ∃ s', ExS Gen.prog s
+        (.seq (.set 10 (.cast u64 (.const (.int u32 1))))
+        (.seq (.set 11 (.cast u8 (.const (.int u32 0))))
+        (.seq (.set 12 (.cast u8 (.const (.int u32 0))))
+        (.seq (.set 13 (.cast u8 (.const (.int u32 0))))
+        (.seq (.set 14 (.cast u8 (.const (.int u32 0))))
+              (.set 15 (.cast u8 (.const (.int u32 255))))))))) .normal s' ∧
+      s'.locals 10 = some (.int u64 1) ∧ s'.locals 11 = some (.int u8 0) ∧
+      s'.locals 12 = some (.int u8 0) ∧ s'.locals 13 = some (.int u8 0) ∧
+      s'.locals 14 = some (.int u8 0) ∧ s'.locals 15 = some (.int u8 255) ∧
+      s'.mem = s.mem := by
+  let s1 : State := { s with locals := s.locals.upd 10 (.int u64 1) }
+  have e10 : ExS Gen.prog s (.set 10 (.cast u64 (.const (.int u32 1)))) .normal s1 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 1)) (u32_u64_cast 1 (by omega)))
+  let s2 : State := { s1 with locals := s1.locals.upd 11 (.int u8 0) }
+  have e11 : ExS Gen.prog s1 (.set 11 (.cast u8 (.const (.int u32 0)))) .normal s2 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s3 : State := { s2 with locals := s2.locals.upd 12 (.int u8 0) }
+  have e12 : ExS Gen.prog s2 (.set 12 (.cast u8 (.const (.int u32 0)))) .normal s3 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s4 : State := { s3 with locals := s3.locals.upd 13 (.int u8 0) }
+  have e13 : ExS Gen.prog s3 (.set 13 (.cast u8 (.const (.int u32 0)))) .normal s4 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s5 : State := { s4 with locals := s4.locals.upd 14 (.int u8 0) }
+  have e14 : ExS Gen.prog s4 (.set 14 (.cast u8 (.const (.int u32 0)))) .normal s5 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 0)) (u32_u8_cast 0 (by omega)))
+  let s6 : State := { s5 with locals := s5.locals.upd 15 (.int u8 255) }
+  have e15 : ExS Gen.prog s5 (.set 15 (.cast u8 (.const (.int u32 255)))) .normal s6 :=
+    ExS.set (EvE.cast (EvE.const (v := .int u32 255)) (u32_u8_cast 255 (by omega)))
+  refine ⟨s6, ExS.seq e10 (ExS.seq e11 (ExS.seq e12 (ExS.seq e13 (ExS.seq e14 e15)))), ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · show s6.locals 10 = some (.int u64 1); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s6.locals 11 = some (.int u8 0); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s6.locals 12 = some (.int u8 0); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s6.locals 13 = some (.int u8 0); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s6.locals 14 = some (.int u8 0); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s6.locals 15 = some (.int u8 255); simp [s6, s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
+  · show s6.mem = s.mem; simp [s6, s5, s4, s3, s2, s1]
+
 end NANO.C.Proofs
