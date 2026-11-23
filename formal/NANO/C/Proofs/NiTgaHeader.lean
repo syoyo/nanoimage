@@ -280,3 +280,32 @@ theorem tgaHeader_loads (m : Mem) (bd : Nat) (d : List UInt8) (hm : m bd = some 
     (ExS.seq call6 (ExS.seq call7 (ExS.seq load8 load9))))))
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- `evalCast` u8→u32 preserves a byte. -/
+theorem u8_u32_cast (n : Nat) (h : n < 256) : evalCast u32 (.int u8 n) = .ok (.int u32 n) := by
+  simp [evalCast, u8, u32, IntTy.modulus, Nat.mod_eq_of_lt (show n < 4294967296 by omega)]
+
+/-- `evalCast` u8→u64 preserves a byte. -/
+theorem u8_u64_cast (n : Nat) (h : n < 256) : evalCast u64 (.int u8 n) = .ok (.int u64 n) := by
+  simp [evalCast, u8, u64, IntTy.modulus, Nat.mod_eq_of_lt (show n < 18446744073709551616 by omega)]
+
+/-- `evalCast` u16→u64 preserves a short. -/
+theorem u16_u64_cast' (n : Nat) (h : n < 65536) : evalCast u64 (.int u16 n) = .ok (.int u64 n) :=
+  u16_u64_cast n h
+
+/-- Unsigned u32 bitwise-and. -/
+theorem bin_u32_band (n k : Nat) :
+    evalBin .band (some u32) (.int u32 n) (.int u32 k) = .ok (.int u32 (n &&& k)) := by
+  simp [evalBin, evalBinInt, binInt, intOf, u32, isPtr, ptrEq]
+
+/-- `evalCast` i32→u8 for a small non-negative literal. -/
+theorem i32_u8_cast (k : Nat) (hk : k < 256) :
+    evalCast u8 (.int i32 k) = .ok (.int u8 k) := by
+  simp only [evalCast, i32, u8, IntTy.signed, if_true]
+  simp [IntTy.wrap, IntTy.toInt, IntTy.modulus, IntTy.signed, IntTy.width, u8,
+    show ¬ (2147483648 ≤ k) by omega, Int.emod_eq_of_lt (by omega : (0 : Int) ≤ (k : Int)) (by omega : (k : Int) < 256), Int.toNat_natCast]
+
+end NANO.C.Proofs
