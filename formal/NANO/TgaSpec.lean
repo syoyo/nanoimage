@@ -90,4 +90,77 @@ theorem tgaWritesAux_rle0_pkt (dat : List UInt8) (h : TgaInfo) (fuel left off : 
   rw [if_neg hleft]
   rw [if_neg (show ¬ (dat.length < off + h.channels) from by omega)]
 
+theorem tgaWritesAux_rle0_walk (dat : List UInt8) (h : TgaInfo) (hrle0 : h.rle = 0) :
+    ∀ (d : Nat) (acc : List TgaWrite), d ≤ h.width * h.height →
+    (∀ i, i < d → (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels) + h.channels ≤ dat.length) →
+    tgaWritesAux dat h d d (h.dataOffset + (h.width * h.height - d) * h.channels) acc
+      = Except.ok (acc ++ (List.range d).map (fun i =>
+          (tgaDstIndex h (h.width * h.height - d + i),
+           tgaPixelOut h.channels (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + 1) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + 2) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + 3) 0)))) := by
+  intro d
+  induction d with
+  | zero =>
+    intro acc _ _
+    rw [show tgaWritesAux dat h 0 0 (h.dataOffset + (h.width * h.height - 0) * h.channels) acc = Except.ok acc from rfl]
+    simp
+  | succ d ih =>
+    intro acc hd hbnd
+    have hb0 : (h.dataOffset + (h.width * h.height - (d+1)) * h.channels) + h.channels ≤ dat.length := by
+      have := hbnd 0 (by omega); rw [Nat.zero_mul, Nat.add_zero] at this
+      rw [show h.width * h.height - (d+1) = h.width * h.height - d - 1 from by omega] at this ⊢; omega
+    rw [tgaWritesAux_rle0_pkt dat h d (d+1) (h.dataOffset + (h.width * h.height - (d+1)) * h.channels) acc hrle0 (by omega) hb0]
+    rw [show d + 1 - 1 = d from by omega]
+    have hcur : (h.dataOffset + (h.width * h.height - (d+1)) * h.channels) + h.channels
+        = h.dataOffset + (h.width * h.height - d) * h.channels := by
+      have : h.width * h.height - d = (h.width * h.height - (d+1)) + 1 := by omega
+      rw [this, Nat.succ_mul]; omega
+    rw [hcur]
+    rw [ih (acc ++ [(tgaDstIndex h (h.width * h.height - (d+1)),
+        tgaPixelOut h.channels (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels) 0)
+          (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + 1) 0)
+          (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + 2) 0)
+          (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + 3) 0))])
+      (by omega)
+      (fun i hi => by
+        have := hbnd (i+1) (by omega)
+        rw [show h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + h.channels
+              = h.dataOffset + (h.width * h.height - (d+1)) * h.channels + (i+1) * h.channels + h.channels from by
+          rw [show h.width * h.height - d = h.width * h.height - (d+1) + 1 from by omega, Nat.succ_mul, Nat.add_mul]; omega]
+        exact this)]
+    have hlist : ([(tgaDstIndex h (h.width * h.height - (d+1)),
+        tgaPixelOut h.channels (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels) 0)
+          (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + 1) 0)
+          (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + 2) 0)
+          (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + 3) 0))] ++
+        (List.range d).map (fun i =>
+          (tgaDstIndex h (h.width * h.height - d + i),
+           tgaPixelOut h.channels (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + 1) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + 2) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - d) * h.channels + i * h.channels + 3) 0))))
+      = (List.range (d+1)).map (fun i =>
+          (tgaDstIndex h (h.width * h.height - (d+1) + i),
+           tgaPixelOut h.channels (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + i * h.channels) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + i * h.channels + 1) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + i * h.channels + 2) 0)
+             (dat.getD (h.dataOffset + (h.width * h.height - (d+1)) * h.channels + i * h.channels + 3) 0))) := by
+      rw [List.range_succ_eq_map, List.map_cons, List.map_map]
+      simp only [Nat.zero_mul, Nat.add_zero]
+      rw [List.singleton_append]
+      congr 1
+      apply List.map_congr_left
+      intro a ha
+      simp only [Function.comp_apply]
+      rw [Prod.mk.injEq]
+      constructor
+      · rw [show h.width * h.height - (d+1) + (a+1) = h.width * h.height - d + a from by omega]
+      · rw [show h.dataOffset + (h.width * h.height - (d+1)) * h.channels + (a+1) * h.channels
+              = h.dataOffset + (h.width * h.height - d) * h.channels + a * h.channels from by
+          rw [show h.width * h.height - d = h.width * h.height - (d+1) + 1 from by omega, Nat.succ_mul, Nat.add_mul]; omega]
+    rw [List.append_assoc]
+    rw [hlist]
+
 end NANO
