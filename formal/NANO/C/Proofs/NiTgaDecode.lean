@@ -171,6 +171,7 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
     (hadd : tgaDstY h p * h.width + tgaDstX h p < 2 ^ 64)
     (hidx : (tgaDstY h p * h.width + tgaDstX h p) * h.channels < 2 ^ 64) :
     ∃ s', ExS Gen.prog s tgaDstCompute .normal s' ∧
+      (∀ j, j ≠ 21 → j ≠ 22 → j ≠ 23 → j ≠ 24 → j ≠ 25 → s'.locals j = s.locals j) ∧
       s'.locals 21 = some (.int u32 (p % h.width)) ∧
       s'.locals 22 = some (.int u32 (p / h.width)) ∧
       s'.locals 23 = some (.int u32 (tgaDstX h p)) ∧
@@ -261,7 +262,9 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
       (EvE.cast (EvE.var h8s) (u8_u64_cast h.channels hch))
       (bin_u64_mul (tgaDstY h p * h.width + tgaDstX h p) h.channels hidx)
   refine ⟨s5, ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.set h25)))),
-    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · intro j h1 h2 h3 h4 h5
+    simp [s5, s4, s3, s2, s1, Locals.upd_ne, h1, h2, h3, h4, h5]
   all_goals first
     | rfl
     | simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
@@ -509,7 +512,7 @@ theorem ni_tga_pixel_step_rle (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (ob
   have l19_4 : s4.locals 19 = some (.int u8 b2) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
   have l20_4 : s4.locals 20 = some (.int u8 b3) := by simp [s4, s3, s2, s1, Locals.upd_same, Locals.upd_ne]
   have m4 : s4.mem = s.mem := rfl
-  obtain ⟨s5, hdst, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
+  obtain ⟨s5, hdst, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
     ni_tga_dst_compute s4 h p info (by rw [m4]; exact hinfo) h32 l2_4 l6_4 l8_4
       (by rw [m4]; exact hl16) (by rw [m4]; exact hl20) (by rw [m4]; exact hl26) (by rw [m4]; exact hl27)
       hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
@@ -601,7 +604,7 @@ theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl 
       s'.locals 6 = some (.int u64 (p + 1)) ∧
       s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length)) ∧
       s'.mem 3 = some info := by
-  obtain ⟨s5, hdst, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
+  obtain ⟨s5, hdst, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
     ni_tga_dst_compute s h p info hinfo h32 l2 l6 l8 hl16 hl20 hl26 hl27
       hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
   have l3_5 : s5.locals 3 = some (.ptr ob 0) := by rw [h3d]; exact l3
