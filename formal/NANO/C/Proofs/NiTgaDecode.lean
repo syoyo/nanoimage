@@ -411,6 +411,8 @@ theorem ni_tga_raw_read (s : State) (bd : Nat) (bs : List UInt8) (hm : s.mem bd 
   have hcomp := ExS.seq hguard (ExS.seq (ExS.set hb0) (ExS.seq h18 (ExS.seq h19 (ExS.seq h20 hset7))))
   simpa [tgaRawRead, s4, s3, s2, s1] using hcomp
 
+
+
 end NANO.C.Proofs
 
 namespace NANO.C.Proofs
@@ -1282,5 +1284,126 @@ theorem ni_tga_l1chk_err (s : State) (count npx pidx : Nat)
   have hgt : EvE Gen.prog s (.bin .gt (some u64) (.var 10) (.bin .sub (some u64) (.var 5) (.var 6))) (boolVal true) :=
     EvE.bin (EvE.var l10) hsub (by rw [bin_u64_gt, decide_eq_true (by omega)])
   exact ExS.ite (bc := true) hgt (by simp [truthy_boolVal]) (ExS.ret (EvE.const (v := .int i32 9)))
+
+theorem ni_tga_l1bytes_ok (s : State) (bd : Nat) (bs : List UInt8) (hm : s.mem bd = some bs)
+    (l0 : s.locals 0 = some (.ptr bd 0)) (l1 : s.locals 1 = some (.int u64 bs.length))
+    (off channels p1 p2 p3 : Nat) (l7 : s.locals 7 = some (.int u64 off))
+    (l8 : s.locals 8 = some (.int u8 channels))
+    (l18 : s.locals 13 = some (.int u8 p1)) (l19 : s.locals 14 = some (.int u8 p2))
+    (l20 : s.locals 15 = some (.int u8 p3))
+    (hch : channels < 256) (hcp : 0 < channels) (hb : off + channels ≤ bs.length)
+    (h64 : off + channels < 2 ^ 64) :
+    ExS Gen.prog s tgaL1Bytes .normal
+      ⟨s.locals.upd 12 (.int u8 (byteAt bs off))
+         |>.upd 13 (if 1 < channels then .int u8 (byteAt bs (off + 1)) else .int u8 p1)
+         |>.upd 14 (if 2 < channels then .int u8 (byteAt bs (off + 2)) else .int u8 p2)
+         |>.upd 15 (if 3 < channels then .int u8 (byteAt bs (off + 3)) else .int u8 p3)
+         |>.upd 7 (.int u64 (off + channels)),
+       s.mem, s.ro⟩ := by
+  have hoffLt : off < bs.length := by omega
+  have hadd : EvE Gen.prog s (.bin .add (some u64) (.var 7) (.cast u64 (.var 8))) (.int u64 (off + channels)) :=
+    EvE.bin (EvE.var l7) (EvE.cast (EvE.var l8) (u8_u64_cast channels hch)) (bin_u64_add off channels h64)
+  have hgt : EvE Gen.prog s (.bin .gt (some u64) (.bin .add (some u64) (.var 7) (.cast u64 (.var 8))) (.var 1)) (boolVal false) :=
+    EvE.bin hadd (EvE.var l1) (by rw [bin_u64_gt, decide_eq_false (by omega)])
+  have hguard : ExS Gen.prog s (.ite (.bin .gt (some u64) (.bin .add (some u64) (.var 7) (.cast u64 (.var 8))) (.var 1))
+      (.ret (some (.const (.int i32 10)))) .skip) .normal s :=
+    ExS.ite hgt (truthy_boolVal false) ExS.skip
+  have hb0 : EvE Gen.prog s (.load (.int u8) (.index (.var 0) (.var 7) 1)) (.int u8 (byteAt bs off)) :=
+    EvE.load (EvE.index (EvE.var l0) (EvE.var l7) (ptrAddN_ok hm (by omega)))
+      (by simpa using load_byte_dyn s.mem bd bs hm off hoffLt)
+  let s1 : State := { s with locals := s.locals.upd 12 (.int u8 (byteAt bs off)) }
+  have readK : ∀ (k : Nat) (hk : 0 < k) (hkc : k < channels) (st : State)
+      (l0' : st.locals 0 = some (.ptr bd 0)) (lik : st.locals 7 = some (.int u64 off))
+      (hmm : st.mem = s.mem),
+      EvE Gen.prog st (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 k)))) 1)) (.int u8 (byteAt bs (off + k))) := by
+    intro k hk hkc st l0' lik hmm
+    have hbs : st.mem bd = some bs := by rw [hmm]; exact hm
+    have hok : 0 + (off + k) * 1 ≤ bs.length := by omega
+    have hk0 : EvE Gen.prog st (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 k)))) (.int u64 (off + k)) :=
+      EvE.bin (EvE.var lik) (EvE.cast (EvE.const (v := .int u32 k)) (u32_u64_cast k (by omega)))
+        (bin_u64_add off k (by omega))
+    exact EvE.load (EvE.index (EvE.var l0') hk0 (ptrAddN_ok hbs hok))
+      (by simpa using load_byte_dyn st.mem bd bs hbs (off + k) (by omega))
+  have l7_1 : s1.locals 7 = some (.int u64 off) := by simp [s1, Locals.upd_ne, l7]
+  have l8_1 : s1.locals 8 = some (.int u8 channels) := by simp [s1, Locals.upd_ne, l8]
+  have cond1 : EvE Gen.prog s1 (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 1))) (boolVal (decide (channels > 1))) :=
+    EvE.bin (EvE.cast (EvE.var l8_1) (u8_u32_cast channels hch)) (EvE.const (v := .int u32 1)) (bin_u32_gt channels 1)
+  let s2 : State := { s1 with locals := s1.locals.upd 13 (if 1 < channels then .int u8 (byteAt bs (off + 1)) else .int u8 p1) }
+  have h18 : ExS Gen.prog s1 (.ite (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 1)))
+        (.set 13 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 1)))) 1))) .skip) .normal s2 := by
+    by_cases hc1 : 1 < channels
+    · have hv : EvE Gen.prog s1 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 1)))) 1)) (.int u8 (byteAt bs (off + 1))) :=
+        readK 1 (by omega) hc1 s1 (by simp [s1, Locals.upd_ne, l0]) l7_1 rfl
+      have heq : s2 = { s1 with locals := s1.locals.upd 13 (.int u8 (byteAt bs (off + 1))) } := by simp [s2, if_pos hc1]
+      rw [heq]
+      refine ExS.ite (bc := true) cond1 (by rw [decide_eq_true hc1]; exact truthy_boolVal true) ?_
+      exact ExS.set (i := 13) hv
+    · have l18_1 : s1.locals 13 = some (.int u8 p1) := by simp [s1, Locals.upd_ne, l18]
+      have heq : s2 = s1 := by simp [s2, if_neg hc1, Locals.upd_of_eq s1.locals 13 (.int u8 p1) l18_1]
+      rw [heq]
+      refine ExS.ite (bc := false) cond1 (by rw [decide_eq_false hc1]; exact truthy_boolVal false) ?_
+      exact ExS.skip
+  have l7_2 : s2.locals 7 = some (.int u64 off) := by simp [s2, Locals.upd_ne, l7_1]
+  have l8_2 : s2.locals 8 = some (.int u8 channels) := by simp [s2, Locals.upd_ne, l8_1]
+  have l19_2 : s2.locals 14 = some (.int u8 p2) := by simp [s2, s1, Locals.upd_ne, l19]
+  have l20_2 : s2.locals 15 = some (.int u8 p3) := by simp [s2, s1, Locals.upd_ne, l20]
+  have cond2 : EvE Gen.prog s2 (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 2))) (boolVal (decide (channels > 2))) :=
+    EvE.bin (EvE.cast (EvE.var l8_2) (u8_u32_cast channels hch)) (EvE.const (v := .int u32 2)) (bin_u32_gt channels 2)
+  let s3 : State := { s2 with locals := s2.locals.upd 14 (if 2 < channels then .int u8 (byteAt bs (off + 2)) else .int u8 p2) }
+  have h19 : ExS Gen.prog s2 (.ite (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 2)))
+        (.set 14 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 2)))) 1))) .skip) .normal s3 := by
+    by_cases hc2 : 2 < channels
+    · have hv : EvE Gen.prog s2 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 2)))) 1)) (.int u8 (byteAt bs (off + 2))) :=
+        readK 2 (by omega) hc2 s2 (by simp [s2, s1, Locals.upd_ne, l0]) l7_2 rfl
+      have heq : s3 = { s2 with locals := s2.locals.upd 14 (.int u8 (byteAt bs (off + 2))) } := by simp [s3, if_pos hc2]
+      rw [heq]
+      refine ExS.ite (bc := true) cond2 (by rw [decide_eq_true hc2]; exact truthy_boolVal true) ?_
+      exact ExS.set (i := 14) hv
+    · have l19_1 : s2.locals 14 = some (.int u8 p2) := l19_2
+      have heq : s3 = s2 := by simp [s3, if_neg hc2, Locals.upd_of_eq s2.locals 14 (.int u8 p2) l19_1]
+      rw [heq]
+      refine ExS.ite (bc := false) cond2 (by rw [decide_eq_false hc2]; exact truthy_boolVal false) ?_
+      exact ExS.skip
+  have l7_3 : s3.locals 7 = some (.int u64 off) := by simp [s3, Locals.upd_ne, l7_2]
+  have l8_3 : s3.locals 8 = some (.int u8 channels) := by simp [s3, Locals.upd_ne, l8_2]
+  have l20_3 : s3.locals 15 = some (.int u8 p3) := by simp [s3, s2, s1, Locals.upd_ne, l20]
+  have cond3 : EvE Gen.prog s3 (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 3))) (boolVal (decide (channels > 3))) :=
+    EvE.bin (EvE.cast (EvE.var l8_3) (u8_u32_cast channels hch)) (EvE.const (v := .int u32 3)) (bin_u32_gt channels 3)
+  let s4 : State := { s3 with locals := s3.locals.upd 15 (if 3 < channels then .int u8 (byteAt bs (off + 3)) else .int u8 p3) }
+  have h20 : ExS Gen.prog s3 (.ite (.bin .gt (some u32) (.cast u32 (.var 8)) (.const (.int u32 3)))
+        (.set 15 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 3)))) 1))) .skip) .normal s4 := by
+    by_cases hc3 : 3 < channels
+    · have hv : EvE Gen.prog s3 (.load (.int u8) (.index (.var 0) (.bin .add (some u64) (.var 7) (.cast u64 (.const (.int u32 3)))) 1)) (.int u8 (byteAt bs (off + 3))) :=
+        readK 3 (by omega) hc3 s3 (by simp [s3, s2, s1, Locals.upd_ne, l0]) l7_3 rfl
+      have heq : s4 = { s3 with locals := s3.locals.upd 15 (.int u8 (byteAt bs (off + 3))) } := by simp [s4, if_pos hc3]
+      rw [heq]
+      refine ExS.ite (bc := true) cond3 (by rw [decide_eq_true hc3]; exact truthy_boolVal true) ?_
+      exact ExS.set (i := 15) hv
+    · have l20_3' : s3.locals 15 = some (.int u8 p3) := l20_3
+      have heq : s4 = s3 := by simp [s4, if_neg hc3, Locals.upd_of_eq s3.locals 15 (.int u8 p3) l20_3']
+      rw [heq]
+      refine ExS.ite (bc := false) cond3 (by rw [decide_eq_false hc3]; exact truthy_boolVal false) ?_
+      exact ExS.skip
+  have l7_4 : s4.locals 7 = some (.int u64 off) := by simp [s4, Locals.upd_ne, l7_3]
+  have l8_4 : s4.locals 8 = some (.int u8 channels) := by simp [s4, Locals.upd_ne, l8_3]
+  have h7 : EvE Gen.prog s4 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 7)) (.cast u64 (.cast u64 (.var 8))))) (.int u64 (off + channels)) := by
+    have e7 : EvE Gen.prog s4 (.cast u64 (.var 7)) (.int u64 off) := EvE.cast (EvE.var l7_4) (u64_u64_cast off (by omega))
+    have e8 : EvE Gen.prog s4 (.cast u64 (.cast u64 (.var 8))) (.int u64 channels) :=
+      EvE.cast (EvE.cast (EvE.var l8_4) (u8_u64_cast channels hch)) (u64_u64_cast channels (by omega))
+    exact EvE.cast (EvE.bin e7 e8 (bin_u64_add off channels h64)) (u64_u64_cast (off + channels) h64)
+  have hset7 : ExS Gen.prog s4 (.set 7 (.cast u64 (.bin .add (some u64) (.cast u64 (.var 7)) (.cast u64 (.cast u64 (.var 8)))))) .normal { s4 with locals := s4.locals.upd 7 (.int u64 (off + channels)) } := ExS.set h7
+  have hcomp := ExS.seq hguard (ExS.seq (ExS.set hb0) (ExS.seq h18 (ExS.seq h19 (ExS.seq h20 hset7))))
+  simpa [tgaL1Bytes, s4, s3, s2, s1] using hcomp
+
+
+theorem ni_tga_l1bytes_err (s : State) (dat : List UInt8) (l1 : s.locals 1 = some (.int u64 dat.length))
+    (off ch : Nat) (l7 : s.locals 7 = some (.int u64 off)) (l8 : s.locals 8 = some (.int u8 ch))
+    (hch : ch < 256) (hbad : dat.length < off + ch) (h64 : off + ch < 2 ^ 64) (hro : s.ro = false) :
+    ExS Gen.prog s tgaL1Bytes (.ret (some (.int i32 10))) s := by
+  have hadd : EvE Gen.prog s (.bin .add (some u64) (.var 7) (.cast u64 (.var 8))) (.int u64 (off + ch)) :=
+    EvE.bin (EvE.var l7) (EvE.cast (EvE.var l8) (u8_u64_cast ch hch)) (bin_u64_add off ch h64)
+  have hgt : EvE Gen.prog s (.bin .gt (some u64) (.bin .add (some u64) (.var 7) (.cast u64 (.var 8))) (.var 1)) (boolVal true) :=
+    EvE.bin hadd (EvE.var l1) (by rw [bin_u64_gt, decide_eq_true (by omega)])
+  exact ExS.seq_ret (ExS.ite (bc := true) hgt (by simp [truthy_boolVal]) (ExS.ret (EvE.const (v := .int i32 10))))
 
 end NANO.C.Proofs
