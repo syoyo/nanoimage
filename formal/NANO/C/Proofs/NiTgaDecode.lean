@@ -175,7 +175,11 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
       s'.locals 22 = some (.int u32 (p / h.width)) ∧
       s'.locals 23 = some (.int u32 (tgaDstX h p)) ∧
       s'.locals 24 = some (.int u32 (tgaDstY h p)) ∧
-      s'.locals 25 = some (.int u64 (tgaDstIndex h p)) ∧ s'.mem = s.mem := by
+      s'.locals 25 = some (.int u64 (tgaDstIndex h p)) ∧
+      s'.locals 3 = s.locals 3 ∧ s'.locals 8 = s.locals 8 ∧
+      s'.locals 17 = s.locals 17 ∧ s'.locals 18 = s.locals 18 ∧
+      s'.locals 19 = s.locals 19 ∧ s'.locals 20 = s.locals 20 ∧
+      s'.mem = s.mem := by
   have hpl : p % h.width < h.width := Nat.mod_lt _ hwpos
   have hqp : p / h.width ≤ p := Nat.div_le_self _ _
   have hpwh : p / h.width < h.height := Nat.div_lt_of_lt_mul hpp
@@ -255,13 +259,11 @@ theorem ni_tga_dst_compute (s : State) (h : TgaInfo) (p : Nat) (obl : List UInt8
         (bin_u64_add (tgaDstY h p * h.width) (tgaDstX h p) hadd))
       (EvE.cast (EvE.var h8s) (u8_u64_cast h.channels hch))
       (bin_u64_mul (tgaDstY h p * h.width + tgaDstX h p) h.channels hidx)
-  refine ⟨s5, ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.set h25)))), ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
-  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
-  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
-  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
-  · simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
-  · rfl
+  refine ⟨s5, ExS.seq (ExS.set h21) (ExS.seq (ExS.set h22) (ExS.seq (ExS.set h23) (ExS.seq (ExS.set h24) (ExS.set h25)))),
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  all_goals first
+    | rfl
+    | simp [s5, s4, s3, s2, s1, Locals.upd_ne, Locals.upd_same]
 
 end NANO.C.Proofs
 
