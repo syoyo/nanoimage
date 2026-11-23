@@ -1138,3 +1138,11 @@ theorem ni_tga_loop0_raw (st0 : State) (h : TgaInfo) (p0 count ob bd : Nat) (obl
   exact aux (count - i0) st0 i0 rfl hinv0
 
 end NANO.C.Proofs
+
+namespace NANO.C.Proofs
+open NANO NANO.C
+
+/-- The decode packet loop (`ni_tga_decode_into_loop1`). -/
+abbrev tgaLoop1 : Stmt := Gen.ni_tga_decode_into_loop1
+
+end NANO.C.Proofs
