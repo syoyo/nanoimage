@@ -603,7 +603,8 @@ theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl 
     ∃ s', ExS Gen.prog s (.seq tgaDstCompute (.seq tgaCall (.seq tgaWrCheck tgaPixelInc))) .normal s' ∧
       s'.locals 6 = some (.int u64 (p + 1)) ∧
       s'.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length)) ∧
-      s'.mem 3 = some info := by
+      s'.mem 3 = some info ∧
+      (∀ j, j ≠ 6 → j ≠ 26 → j ≠ 21 → j ≠ 22 → j ≠ 23 → j ≠ 24 → j ≠ 25 → s'.locals j = s.locals j) := by
   obtain ⟨s5, hdst, hgen, h21, h22, h23, h24, h25, h3d, h8d, h17d, h18d, h19d, h20d, h6d, h7d, hm5, hro5⟩ :=
     ni_tga_dst_compute s h p info hinfo h32 l2 l6 l8 hl16 hl20 hl26 hl27
       hw32 hh32 hwpos hpw hch hro8 hto8 hp hhpos hpp hmul hadd hidx
@@ -633,7 +634,7 @@ theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl 
     EvE.cast (EvE.bin e6 e1 (bin_u64_add p 1 hp1)) (u64_u64_cast (p + 1) hp1)
   let s7 : State := { s6 with locals := s6.locals.upd 6 (.int u64 (p + 1)) }
   have hinc : ExS Gen.prog s6 tgaPixelInc .normal s7 := ExS.set einc
-  refine ⟨s7, ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)), ?_, ?_, ?_⟩
+  refine ⟨s7, ExS.seq hdst (ExS.seq hcall (ExS.seq hwr hinc)), ?_, ?_, ?_, ?_⟩
   · show s7.locals 6 = some (.int u64 (p + 1))
     simp [s7, Locals.upd_same]
   · show s7.mem ob = some (obl.take (tgaDstIndex h p) ++ tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v) ++ obl.drop (tgaDstIndex h p + (tgaPixelOut h.channels (UInt8.ofNat r0v) (UInt8.ofNat r1v) (UInt8.ofNat r2v) (UInt8.ofNat r3v)).length))
@@ -644,6 +645,11 @@ theorem ni_tga_pixel_suffix (s : State) (h : TgaInfo) (p : Nat) (ob : Nat) (obl 
     show (s5.mem.upd ob _) 3 = some info
     rw [show (s5.mem.upd ob _) 3 = s5.mem 3 from by rw [Mem.upd_ne (h := by omega)]]
     rw [hm5]; exact hinfo
+  · intro j h6 h26 h21 h22 h23 h24 h25
+    show s7.locals j = s.locals j
+    rw [show s7.locals j = s6.locals j from by simp [s7, Locals.upd_ne, h6]]
+    rw [show s6.locals j = s5.locals j from by show (s5.locals.upd 26 (.int i32 1)) j = s5.locals j; simp [Locals.upd_ne, h26]]
+    exact hgen j h21 h22 h23 h24 h25
 
 end NANO.C.Proofs
 
@@ -757,7 +763,7 @@ theorem ni_tga_pixel_step_raw (s : State) (h : TgaInfo) (p : Nat) (ob bd : Nat) 
   have l6R : sR.locals 6 = some (.int u64 p) := by simp [sR, s4, s3, s2, s1, Locals.upd_ne, l6]
   have l8R : sR.locals 8 = some (.int u8 h.channels) := by simp [sR, s4, s3, s2, s1, Locals.upd_ne, l8]
   have hmR : sR.mem = s.mem := rfl
-  obtain ⟨s', hsuf, h6, hob, hinfo'⟩ :=
+  obtain ⟨s', hsuf, h6, hob, hinfo', hgen'⟩ :=
     ni_tga_pixel_suffix sR h p ob obl (by rw [hmR]; exact hmob) hlob (by show sR.ro = false; simp [sR]; exact hro)
       hob3 info (by rw [hmR]; exact hinfo) h32 l2R l3R l6R l8R (byteAt dat off) r1v r2v r3v h17 h18 h19 h20
       (by rw [hmR]; exact hl16) (by rw [hmR]; exact hl20) (by rw [hmR]; exact hl26) (by rw [hmR]; exact hl27)
