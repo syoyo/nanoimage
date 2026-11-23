@@ -57,3 +57,24 @@ theorem tgaWriteAt_eq (buf : List UInt8) (i : Nat) (bs : List UInt8)
   rw [fold_set_range_aux buf bs i bs.length (Nat.le_refl _) h, List.take_length]
 
 end NANO
+
+namespace NANO
+
+theorem fold_set_range_length (buf bs : List UInt8) (i n : Nat) :
+    ((List.range n).foldl (fun b k => b.set (i + k) (bs.getD k 0)) buf).length = buf.length := by
+  induction n with
+  | zero => simp
+  | succ n ih =>
+    simp only [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+    rw [List.length_set, ih]
+
+theorem tgaWriteAt_length (buf : List UInt8) (i : Nat) (bs : List UInt8) :
+    (tgaWriteAt buf (i, bs)).length = buf.length := by
+  simp only [tgaWriteAt]
+  exact fold_set_range_length buf bs i bs.length
+
+theorem tgaMaterialize_snoc (n : Nat) (ws : List TgaWrite) (w : TgaWrite) :
+    tgaMaterialize n (ws ++ [w]) = tgaWriteAt (tgaMaterialize n ws) w := by
+  simp only [tgaMaterialize, List.foldl_append, List.foldl_cons, List.foldl_nil]
+
+end NANO
