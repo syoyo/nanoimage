@@ -189,7 +189,7 @@ theorem tgaWritesAux_ok_cnt {dat : List UInt8} {h : TgaInfo} {fuel left off : Na
     rw [if_pos (show (byteAt dat off &&& 0x7f) + 1 > left from Nat.lt_of_not_le hc)] at hok
     exact absurd hok (by intro h2; cases h2)
 
-def TgaOk (dat : List UInt8) (h : TgaInfo) : Nat → Nat → Nat → Prop
+def TgaOkW (dat : List UInt8) (h : TgaInfo) : Nat → Nat → Nat → Prop
   | 0, _, _ => True
   | fuel + 1, left, off =>
       left = 0 ∨
@@ -200,28 +200,28 @@ def TgaOk (dat : List UInt8) (h : TgaInfo) : Nat → Nat → Nat → Prop
        ((h.rle ≠ 0 ∧ (byteAt dat off &&& 0x80) = 0) →
          (∀ i, i < (byteAt dat off &&& 0x7f) + 1 →
            off + 1 + i * h.channels + h.channels ≤ dat.length)) ∧
-       TgaOk dat h fuel
+       TgaOkW dat h fuel
          (left - (if h.rle = 0 then 1 else (byteAt dat off &&& 0x7f) + 1))
          (if h.rle = 0 ∨ (byteAt dat off &&& 0x80) ≠ 0
           then (if h.rle = 0 then off else off + 1) + h.channels
           else off + 1 + (if h.rle = 0 then 1 else (byteAt dat off &&& 0x7f) + 1) * h.channels))
 
-theorem tgaWritesAux_ok_of_TgaOk (dat : List UInt8) (h : TgaInfo) (fuel left off : Nat) (acc : List TgaWrite)
-    (hok : TgaOk dat h fuel left off) :
+theorem tgaWritesAux_ok_of_TgaOkW (dat : List UInt8) (h : TgaInfo) (fuel left off : Nat) (acc : List TgaWrite)
+    (hok : TgaOkW dat h fuel left off) :
     ∃ res, tgaWritesAux dat h fuel left off acc = Except.ok res := by
   induction fuel generalizing left off acc with
   | zero => exact ⟨acc, rfl⟩
   | succ fuel ih =>
-    rw [TgaOk] at hok
+    simp only [TgaOkW] at hok
     rcases hok with hl | ⟨hdr, hcnt, hbyte, hraw, hrec⟩
     · exact ⟨acc, by rw [tgaWritesAux.eq_def]; simp only [hl, if_true]; rfl⟩
     · by_cases hrle : h.rle = 0
       · have hb : off + h.channels ≤ dat.length := by
           have := hbyte (Or.inl hrle); simpa [hrle] using this
-        have hne : left ≠ 0 := by
-          have := hcnt; simp only [hrle, if_true] at this; omega
+        have hc1 : 1 ≤ left := by have := hcnt; simpa [hrle] using this
+        have hne : left ≠ 0 := by omega
         rw [tgaWritesAux_rle0_pkt dat h fuel left off acc hrle hne hb]
-        exact ih _ _ _ (by simpa [hrle] using hrec)
+        exact ih (left - 1) (off + h.channels) _ (by simpa [hrle] using hrec)
       · have hoff : off < dat.length := by
           rcases hdr with h0 | hlt
           · omega
@@ -233,10 +233,11 @@ theorem tgaWritesAux_ok_of_TgaOk (dat : List UInt8) (h : TgaInfo) (fuel left off
         · have hb : off + 1 + h.channels ≤ dat.length := by
             have := hbyte (Or.inr hbit); simpa [hrle] using this
           rw [tgaWritesAux_rle_pkt dat h fuel left off acc hrle hne hoff hcnt' hbit hb]
-          exact ih _ _ _ (by simpa [hrle, hbit] using hrec)
-        · have hbit0 : (byteAt dat off &&& 0x80) = 0 := by omega
-          have hrawb := hraw ⟨hrle, hbit0⟩
+          exact ih _ (off + 1 + h.channels) _ (by simpa [hrle, hbit, if_true] using hrec)
+        · have hbit0 : (byteAt dat off &&& 0x80) = 0 := Classical.not_not.mp hbit
+          have hrawb := hraw ⟨by omega, hbit0⟩
           rw [tgaWritesAux_raw_pkt dat h fuel left off acc hrle hne hoff hcnt' hbit0 hrawb]
-          exact ih _ _ _ (by simpa [hrle, hbit0] using hrec)
+          exact ih _ (off + 1 + ((byteAt dat off &&& 0x7f) + 1) * h.channels) _
+            (by simpa [hrle, hbit0, if_false, if_true, Or.inr] using hrec)
 
 end NANO
