@@ -58,20 +58,25 @@ Loop0 (inner packet loop) - complete:
   `tgaWritesAux_ok_of_TgaOkW` (TgaOkW => tgaWritesAux succeeds).
 - `tgaPixelOut_ext` (channels-only dependence).
 
-**Remaining: `ni_tga_loop1_rne` (compressed loop1 fuel induction).**
-Approach worked out but not yet closed; the measure must be fuel `k` (a packet
-consumes `count` pixels but one fuel step), invariant per iteration:
-`npx - pidx = k`, `TgaL1Inv s ... pidx off`, `obl = tgaMaterialize ws`,
-`TgaOkW dat h k (npx - pidx) off`. Each step dispatches on `byteAt dat off &&& 0x80`:
-- RLE run: `ni_tga_l1step_rle_pkt` + `tgaWritesAux_rle_pkt`, recurse with
-  `k-1`, pixels `pidx+count`, off `off+1+ch`, buffer via `tgaMaterialize_rle`.
-- raw: `ni_tga_l1step_raw_pkt` + `tgaWritesAux_raw_pkt`, off `off+1+count*ch`,
-  buffer via `tgaMaterialize_raw`.
-The open difficulty is only the buffer-reconciliation rewrite direction
-(`tgaFoldI (tgaMaterialize ws) = tgaMaterialize (ws ++ map)`), a
-definitional/rewrite-shape issue in the `ih` call, not a mathematical gap.
-WIP file: `/tmp/loop1_rne_wip.lean` (close to compiling; 2 remaining
-type-mismatch errors in the RLE branch's `ih` call).
+**Compressed path (rle != 0) — NOW PROVEN END TO END:**
+- `ni_tga_loop1_rne`: fuel induction over the packet loop (rle != 0), carrying
+  the joint machine+spec invariant; dispatches per packet on the header high bit,
+  using `ni_tga_l1step_rle_pkt`/`_raw_pkt`, `tgaWritesAux_rle_pkt`/`_raw_pkt`,
+  `TgaOkW`, and `tgaMaterialize_rle`/`_raw` for the buffer reconciliation.
+- `ni_tga_decode_into_ok_rne`: top-level for compressed images (preamble +
+  loop1 + ret 0 -> tgaPixels), precondition `TgaOkW` over the initial walk.
+- helper lemmas in `TgaLoop1Rle`: `tgaPixelOut_congr`, `tgaPixelOut_byteAt_eq`,
+  `tgaPixelOut_raw_byteAt_eq`.
+
+**Both decode top-level theorems now exist**: `ni_tga_decode_into_ok_rle0`
+(uncompressed) and `ni_tga_decode_into_ok_rne` (compressed). A single
+mode-dispatching `ni_tga_decode_into_ok_exs` combining them is the next small
+step (each branch takes its own data-bound hypotheses; rle0 needs per-offset
+`hdbnd`/`hdob` which `TgaOkW` does not directly yield for the single byte read).
+
+**Remaining for the full TGA goal:** unified top-level `ni_tga_decode_into_ok_exs`,
+then **M4** `ni_load_tga` -> `tgaDecode` (compose header fid21 + decode fid23 and
+handle the error/tag path).
 
 ## Immediate next work (M1-M4)
 
