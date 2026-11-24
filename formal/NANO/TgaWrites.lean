@@ -280,4 +280,16 @@ theorem tgaFoldRaw_eq_materialize (dat : List UInt8) (h : TgaInfo) (p0 off0 n : 
   intro i hi
   simp only [ofNat_byteAt]
 
+
+/-- `UInt8.ofNat` pushed through a conditional byte read, to `getD`. -/
+theorem ofNat_ite_byteAt (d : List UInt8) (o c b : Nat) :
+    (UInt8.ofNat (if 1 < c then byteAt d o else b))
+      = (if 1 < c then d.getD o 0 else UInt8.ofNat b) := by
+  split
+  · rw [ofNat_byteAt]
+  · rfl
+
+
+
+
 end NANO
