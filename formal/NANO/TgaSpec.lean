@@ -163,4 +163,30 @@ theorem tgaWritesAux_rle0_walk (dat : List UInt8) (h : TgaInfo) (hrle0 : h.rle =
     rw [List.append_assoc]
     rw [hlist]
 
+theorem tgaWritesAux_ok_off {dat : List UInt8} {h : TgaInfo} {fuel left off : Nat} {acc res : List TgaWrite}
+    (hrne : h.rle ≠ 0) (hleft : left ≠ 0)
+    (hok : tgaWritesAux dat h (fuel + 1) left off acc = Except.ok res) :
+    off < dat.length := by
+  by_cases hlt : off < dat.length
+  · exact hlt
+  · exfalso
+    have hge : off ≥ dat.length := Nat.le_of_not_lt hlt
+    rw [tgaWritesAux.eq_def] at hok
+    simp only [Nat.succ_ne_zero, if_neg hleft, if_pos hrne, if_pos hge, Except.bind, Except.pure] at hok
+    cases hok
+
+
+theorem tgaWritesAux_ok_cnt {dat : List UInt8} {h : TgaInfo} {fuel left off : Nat} {acc res : List TgaWrite}
+    (hrne : h.rle ≠ 0) (hleft : left ≠ 0) (hoff : off < dat.length)
+    (hok : tgaWritesAux dat h (fuel + 1) left off acc = Except.ok res) :
+    (byteAt dat off &&& 0x7f) + 1 ≤ left := by
+  by_cases hc : (byteAt dat off &&& 0x7f) + 1 ≤ left
+  · exact hc
+  · exfalso
+    rw [tgaWritesAux.eq_def] at hok
+    simp only [Nat.succ_ne_zero, if_neg hleft, if_pos hrne,
+      show ¬ (off ≥ dat.length) from by omega, if_false, pure_bind] at hok
+    rw [if_pos (show (byteAt dat off &&& 0x7f) + 1 > left from Nat.lt_of_not_le hc)] at hok
+    exact absurd hok (by intro h2; cases h2)
+
 end NANO
