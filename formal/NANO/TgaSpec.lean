@@ -240,4 +240,29 @@ theorem tgaWritesAux_ok_of_TgaOkW (dat : List UInt8) (h : TgaInfo) (fuel left of
           exact ih _ (off + 1 + ((byteAt dat off &&& 0x7f) + 1) * h.channels) _
             (by simpa [hrle, hbit0, if_false, if_true, Or.inr] using hrec)
 
+theorem TgaOkW_rle0_dbnd (dat : List UInt8) (h : TgaInfo) (hrle0 : h.rle = 0) :
+    ∀ (n off : Nat), TgaOkW dat h n n off →
+      ∀ i, i < n → off + i * h.channels + h.channels ≤ dat.length := by
+  intro n
+  induction n with
+  | zero => intro off _ i hi; omega
+  | succ n ih =>
+    intro off hok i hi
+    simp only [TgaOkW] at hok
+    rcases hok with hz | ⟨_, _, hbyte, _, hrec⟩
+    · omega
+    · have hb0 : off + h.channels ≤ dat.length := by
+        have := hbyte (Or.inl hrle0); simpa [hrle0] using this
+      have hrec' : TgaOkW dat h n n (off + h.channels) := by
+        simpa [hrle0] using hrec
+      have := ih (off + h.channels) hrec'
+      cases i with
+      | zero => simpa using hb0
+      | succ j =>
+        have hi' : j < n := by omega
+        have := ih (off + h.channels) hrec' j hi'
+        rw [Nat.succ_mul]
+        omega
+
+
 end NANO

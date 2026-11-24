@@ -2505,4 +2505,38 @@ theorem ni_tga_decode_into_ok_rne (m : Mem) (bd size ob outCap : Nat) (info dat 
     exact ni_tga_decode_preamble_frame m bd size ob outCap info hm3 h32 ro hro h.channels h.rle h.width h.height h.dataOffset hw32 hh32 hl8 hl9 hl16 hl20 hl7 hwh64
       (.seq tgaLoop1 (.ret (some (.const (.int ⟨32, true⟩ 0))))) (.ret (some (.int ⟨32, true⟩ 0))) st' hcont
 
+theorem ni_tga_decode_into_ok_exs (m : Mem) (bd size ob outCap : Nat) (info dat : List UInt8) (ro : Bool) (h : TgaInfo)
+    (hsize : size = dat.length) (hm3 : m 3 = some info) (h32 : info.length = 32)
+    (hmbd : m bd = some dat) (hmob : m ob = some (tgaMaterialize h.outputSize []))
+    (hbdo : bd ≠ ob) (hob3 : ob ≠ 3) (hbd3 : bd ≠ 3) (hro : ro = false)
+    (hl8 : load m (.int u8) (.ptr 3 24) = .ok (.int u8 h.channels))
+    (hl9 : load m (.int u8) (.ptr 3 25) = .ok (.int u8 h.rle))
+    (hl16 : load m (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load m (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl7 : load m (.int u64) (.ptr 3 8) = .ok (.int u64 h.dataOffset))
+    (hl26 : load m (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load m (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hch : h.channels < 256) (hcp : 0 < h.channels) (hrle8 : h.rle < 256)
+    (hdat64 : dat.length < 2 ^ 64) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hoblob : (tgaMaterialize h.outputSize []).length < 2 ^ 64)
+    (hbnd : ∀ q, q < h.width * h.height → TgaPixelBounds h q)
+    (hwbf : ∀ q, q < h.width * h.height → tgaDstIndex h q + h.channels ≤ (tgaMaterialize h.outputSize []).length)
+    (hOk : TgaOkW dat h (h.width * h.height) (h.width * h.height) h.dataOffset)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    ∃ s' p, tgaPixels dat h = Except.ok p ∧
+      ExS Gen.prog ⟨frameLocals [0,1,2,3,4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap], m, ro⟩
+        Gen.ni_tga_decode_into.body (.ret (some (.int ⟨32, true⟩ 0))) s' ∧
+      s'.mem ob = some p := by
+  by_cases hrle0 : h.rle = 0
+  · -- uncompressed: derive the per-pixel data bounds from TgaOkW
+    have hdbnd := TgaOkW_rle0_dbnd dat h hrle0 (h.width * h.height) h.dataOffset hOk
+    exact ni_tga_decode_into_ok_rle0 m bd size ob outCap info dat ro h hsize hm3 h32 hmbd hmob hbdo hob3 hbd3 hro
+      hrle0 hl8 hl9 hl16 hl20 hl7 hl26 hl27 hch hcp hdat64 hwh64 hw32 hh32 hwpos hhpos hro8 hto8 hoblob hbnd hwbf
+      hdbnd (fun i hi => by have := hdbnd i hi; omega)
+      hc
+  · exact ni_tga_decode_into_ok_rne m bd size ob outCap info dat ro h hsize hm3 h32 hmbd hmob hbdo hob3 hbd3 hro
+      hrle0 hl8 hl9 hl16 hl20 hl7 hl26 hl27 hch hcp hrle8 hdat64 hwh64 hw32 hh32 hwpos hhpos hro8 hto8 hoblob hbnd hwbf hOk hc
+
 end NANO.C.Proofs
