@@ -65,7 +65,7 @@ No `native_decide`, no `bv_decide`.
 | 3 | TGA translation (fids 21–23 in `Gen.lean`; the write call is a statement-call — expression-calls run under `ro=true` and may not write) | done; `c2lean --check` green |
 | 3 | TGA spec `NANO/Tga.lean` (`TgaInfo`, staged gates, sequential packet-stream `tgaPixels` with origin flip) | done |
 | 3 | TGA differential (C == MiniC == spec; RLE + raw, palettes rejected) | green — `make lean-diff` 4800 cases (600 TGA), 0 mismatches |
-| 3 | TGA refinement proofs (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop refinements, composed load) | **in progress** (M1–M4 of continuation plan) |
+| 3 | TGA refinement proofs (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop-packet refinements `ni_tga_loop1_rle`/`ni_tga_loop1_rne`, unified decode `ni_tga_decode_into_ok_exs`, composed load `ni_tga_load_exs`) | **proven** — axioms `[propext, Classical.choice, Quot.sound]` (write-pixel: `[propext, Quot.sound]`) |
 | 4 | GIF | not started |
 | 5 | PNG container (inflate is an oracle until phase 6) | not started |
 | 6 | Verified DEFLATE / zlib, default switch | not started |
@@ -159,17 +159,20 @@ Kernel notes (no `unsafe`, no `native_decide`):
   (all-pixels-OK case), and `ni_bmp_load_exs` are proven with axioms
   `[propext, Classical.choice, Quot.sound]`. Decode-side mid-decode failure
   codes are covered by cdiff, not by a dedicated failure theorem.
-* Phase 3 (TGA) groundwork is complete (core/shell split, spec, Gen fids 21-23,
-  cdiff 600 TGA cases). **TGA refinement proofs are not started yet**
-  (`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, loop refinements,
-  composed load). This is the active continuation target (M1-M4 in
-  `~/.commandcode/plans/nanoimage-formalization-status-and-plan.md`).
+* Phase 3 (TGA) is **complete**: core/shell split, spec (`NANO/Tga.lean`),
+  Gen fids 21-23, cdiff (600 TGA cases) and the Lean refinement proofs are all
+  in place with axiom-clean `#print axioms` (`[propext, Classical.choice,
+  Quot.sound]`; `ni_tga_write_pixel_exs` needs only `[propext, Quot.sound]`):
+  `ni_tga_header_exs` (`NiTgaHeaderExs.lean`), `ni_tga_write_pixel_exs`
+  (`NiTgaWritePixel.lean`), the loop-packet refinements `ni_tga_loop1_rle`/
+  `ni_tga_loop1_rne` and unified decode `ni_tga_decode_into_ok_exs`
+  (`NiTgaDecode.lean`), the header-field read-back lemmas
+  `tgaHeaderBlock_load{8,16,20,24,25,26,27}` (`NiTgaLoadFields.lean`), and the
+  composed load `ni_tga_load_exs` (`NiTgaLoadCompose.lean`).
+  Decode precondition `TgaOkW` (fuel-indexed packet-stream well-formedness)
+  replaces per-pixel success hypotheses for both rle=0 and rle≠0.
 * Phases 4-9 (GIF, PNG container/oracle, verified DEFLATE, JPEG integer IDCT,
   composition/assurance/CI) are not started.
-* TGA proof boundary (current): C/spec/translation/cdiff are in place, but Lean
-  refinement proofs for TGA are pending. Do not claim TGA verified until
-  `ni_tga_header_exs`, `ni_tga_write_pixel_exs`, decode-loop refinement, and
-  composed load theorems land with axiom-clean `#print axioms`.
 * `ni_bmp_header_exs` composition note: the final theorem was assembled only
   after factoring the whole post-reader pipeline into standalone lemmas,
   because the monolithic term deep-recursed the Lean kernel even at

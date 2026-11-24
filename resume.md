@@ -1,6 +1,6 @@
 # nanoimage Lean verification: resumption prompt
 
-Repository: `~/work/nanoimage`. Current git head: `cb7f5e3` (Phase 3 groundwork).
+Repository: `~/work/nanoimage`. Phase 3 (TGA) fully proven; see `git log`.
 Active continuation plan: `~/.commandcode/plans/nanoimage-formalization-status-and-plan.md`.
 Status: `formal/VERIFICATION.md`. Method: `formal/README.md`.
 
@@ -8,12 +8,13 @@ Status: `formal/VERIFICATION.md`. Method: `formal/README.md`.
 
 - **Phase 0/1 complete**: MiniC infra, translator/cdiff, shared core helper proofs in `formal/NANO/C/Proofs/Core.lean`.
 - **Phase 2 BMP complete**: `ni_bmp_header_exs`, `ni_bmp_decode_into_ok_exs` (all-pixels-OK), `ni_bmp_load_exs` proven, axioms `[propext, Classical.choice, Quot.sound]`.
-- **Phase 3 TGA groundwork complete, proofs pending**:
+- **Phase 3 TGA complete (M1–M4)**:
   - C: `src/nanoimage_tga_core.c`, shell `src/nanoimage_tga.c`, `ni_tga_info`/`NI_TGA_ERR_*` in `src/nanoimage_core.h`.
-  - Spec: `formal/NANO/Tga.lean` (`tgaHeader`, `tgaWritesAux` fuel=pixel count, `tgaMaterialize` by `List.set`, `tgaPixels/tgaDecode`).
+  - Spec: `formal/NANO/Tga.lean` (+ `formal/NANO/TgaSpec.lean`) (`tgaHeader`, `tgaWritesAux` fuel=pixel count, `tgaMaterialize` by `List.set`, `tgaPixels/tgaDecode`, `TgaOkW`).
   - Translation: Gen fids 21-23; write_pixel is statement-call in decode (avoid expr-call `ro=true` UB).
   - Diff: cdiff arms in `formal/CDiff.lean`, `formal/tools/{cdiff_c.c,cdiff.py}`; 4800 cases / 0 mismatches total (600 TGA).
-  - Lean proofs: **not started**. No `formal/NANO/C/Proofs/*Tga*`; `NANO.lean` has no TGA proof imports.
+  - Lean proofs: `ni_tga_header_exs`, `ni_tga_write_pixel_exs`, `ni_tga_loop1_rle`/`ni_tga_loop1_rne`, `ni_tga_decode_into_ok_exs`, `tgaHeaderBlock_load{8,16,20,24,25,26,27}`, `ni_tga_load_exs` — all axiom-clean
+    (`[propext, Classical.choice, Quot.sound]`; write-pixel `[propext, Quot.sound]`).
 
 ## Baseline gates (revalidated 2026-11-23)
 
