@@ -2429,4 +2429,80 @@ theorem ni_tga_loop1_rne (st0 : State) (h : TgaInfo) (npx ob bd : Nat) (info dat
           exact hspec'
 
 
+theorem ni_tga_decode_into_ok_rne (m : Mem) (bd size ob outCap : Nat) (info dat : List UInt8) (ro : Bool) (h : TgaInfo)
+    (hsize : size = dat.length) (hm3 : m 3 = some info) (h32 : info.length = 32)
+    (hmbd : m bd = some dat) (hmob : m ob = some (tgaMaterialize h.outputSize []))
+    (hbdo : bd ≠ ob) (hob3 : ob ≠ 3) (hbd3 : bd ≠ 3) (hro : ro = false)
+    (hrne : h.rle ≠ 0)
+    (hl8 : load m (.int u8) (.ptr 3 24) = .ok (.int u8 h.channels))
+    (hl9 : load m (.int u8) (.ptr 3 25) = .ok (.int u8 h.rle))
+    (hl16 : load m (.int u32) (.ptr 3 16) = .ok (.int u32 h.width))
+    (hl20 : load m (.int u32) (.ptr 3 20) = .ok (.int u32 h.height))
+    (hl7 : load m (.int u64) (.ptr 3 8) = .ok (.int u64 h.dataOffset))
+    (hl26 : load m (.int u8) (.ptr 3 26) = .ok (.int u8 h.topOrigin))
+    (hl27 : load m (.int u8) (.ptr 3 27) = .ok (.int u8 h.rightOrigin))
+    (hch : h.channels < 256) (hcp : 0 < h.channels) (hrle8 : h.rle < 256)
+    (hdat64 : dat.length < 2 ^ 64) (hwh64 : h.width * h.height < 2 ^ 64)
+    (hw32 : h.width < 2 ^ 32) (hh32 : h.height < 2 ^ 32) (hwpos : 0 < h.width) (hhpos : 0 < h.height)
+    (hro8 : h.rightOrigin < 256) (hto8 : h.topOrigin < 256)
+    (hoblob : (tgaMaterialize h.outputSize []).length < 2 ^ 64)
+    (hbnd : ∀ q, q < h.width * h.height → TgaPixelBounds h q)
+    (hwbf : ∀ q, q < h.width * h.height → tgaDstIndex h q + h.channels ≤ (tgaMaterialize h.outputSize []).length)
+    (hOk : TgaOkW dat h (h.width * h.height) (h.width * h.height) h.dataOffset)
+    (hc : h.channels = 1 ∨ h.channels = 3 ∨ h.channels = 4) :
+    ∃ s' p, tgaPixels dat h = Except.ok p ∧
+      ExS Gen.prog ⟨frameLocals [0,1,2,3,4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap], m, ro⟩
+        Gen.ni_tga_decode_into.body (.ret (some (.int ⟨32, true⟩ 0))) s' ∧
+      s'.mem ob = some p := by
+  let base : Locals := frameLocals [0,1,2,3,4] [.ptr bd 0, .int u64 size, .ptr 3 0, .ptr ob 0, .int u64 outCap]
+  let st0 : State := ⟨base, m, ro⟩
+  let mid : State := ⟨base.upd 8 (.int u8 h.channels) |>.upd 9 (.int u8 h.rle) |>.upd 5 (.int u64 (h.width * h.height)) |>.upd 7 (.int u64 h.dataOffset) |>.upd 6 (.int u64 0), m, ro⟩
+  have hinv : TgaL1Inv mid h (h.width * h.height) ob bd (tgaMaterialize h.outputSize []) info dat 0 h.dataOffset := by
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 0 [0,1,2,3,4] = some 0 from by decide]; rfl
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 1 [0,1,2,3,4] = some 1 from by decide]; simp [hsize]
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 2 [0,1,2,3,4] = some 2 from by decide]; rfl
+    · dsimp only [mid, base]; simp [Locals.upd, frameLocals]
+      rw [show List.idxOf? 3 [0,1,2,3,4] = some 3 from by decide]; rfl
+    · dsimp only [mid]; exact hmob
+    · dsimp only [mid]; exact hm3
+    · dsimp only [mid]; exact hmbd
+    · dsimp only [mid]; exact hro
+    · simp
+  -- exploit that mid.mem = m, so the loads on st0.mem transport to mid.mem
+  have hmidmem : mid.mem = m := rfl
+  have hinvoke := ni_tga_loop1_rne mid h (h.width * h.height) ob bd info dat
+    hch hcp hdat64 hob3 hbd3 hbdo rfl h32 hwh64 hrne hrle8 (fun o => byteAt_lt dat o)
+    (by dsimp only [mid]; exact hm3)
+    hw32 hh32 hwpos hhpos hro8 hto8 hwh64
+    (by dsimp only [mid]; exact hl16) (by dsimp only [mid]; exact hl20)
+    (by dsimp only [mid]; exact hl26) (by dsimp only [mid]; exact hl27)
+    hbnd hc
+  -- hinvoke : ∀ k, (∀ s pidx off obl ws, ...). Apply k = W*H, then mid, 0, dataOffset, buffer, []
+  obtain ⟨st', final, hrun, hspec, hmem⟩ :=
+    hinvoke (h.width * h.height) mid 0 h.dataOffset (tgaMaterialize h.outputSize []) []
+      (by omega) (by omega) hinv rfl hoblob
+      hwbf
+      hOk
+  have hret : ExS Gen.prog st' (.ret (some (.const (.int ⟨32, true⟩ 0)))) (.ret (some (.int ⟨32, true⟩ 0))) st' :=
+    ExS.ret (EvE.const (v := .int ⟨32, true⟩ 0))
+  refine ⟨st', tgaMaterialize h.outputSize final, ?_, ?_, hmem⟩
+  · simp only [tgaPixels, tgaWrites]
+    rw [show tgaWritesAux dat h (h.width * h.height) (h.width * h.height) h.dataOffset []
+          = Except.ok final from by simpa using hspec]
+    rfl
+  · have hcont : ExS Gen.prog mid (.seq tgaLoop1 (.ret (some (.const (.int ⟨32, true⟩ 0))))) (.ret (some (.int ⟨32, true⟩ 0))) st' :=
+      ExS.seq hrun hret
+    dsimp only [Gen.ni_tga_decode_into]
+    exact ni_tga_decode_preamble_frame m bd size ob outCap info hm3 h32 ro hro h.channels h.rle h.width h.height h.dataOffset hw32 hh32 hl8 hl9 hl16 hl20 hl7 hwh64
+      (.seq tgaLoop1 (.ret (some (.const (.int ⟨32, true⟩ 0))))) (.ret (some (.int ⟨32, true⟩ 0))) st' hcont
+
 end NANO.C.Proofs
