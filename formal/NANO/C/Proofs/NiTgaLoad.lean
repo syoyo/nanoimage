@@ -7,6 +7,9 @@ import NANO.C.Proofs.NiTgaHeader
 import NANO.C.Proofs.NiTgaHeaderExs
 
 open NANO NANO.C NANO.C.Proofs
+
+namespace NANO.C.Proofs
+
 set_option maxHeartbeats 4000000 in
 
 /-- Reading `n` bytes of a block that is present and long enough. -/
@@ -47,3 +50,5 @@ theorem decodeLE_enc4 (n : Nat) (hn : n < 2 ^ 32) : decodeLE (encodeLE 4 n) = n 
 theorem decodeLE_enc8 (n : Nat) (hn : n < 2 ^ 64) : decodeLE (encodeLE 8 n) = n := by
   rw [decodeLE_encodeLE, show (256 : Nat) ^ 8 = 2 ^ 64 from by decide]
   exact Nat.mod_eq_of_lt hn
+
+end NANO.C.Proofs
