@@ -21,6 +21,58 @@ Status: `formal/VERIFICATION.md`. Method: `formal/README.md`.
 - `make lean-check` — pass (`lake build` + `c2lean.py --check`)
 - `make lean-diff` — pass, 4800 cases, 0 mismatches
 
+## Phase 3 TGA proof progress (as of head 986cd52)
+
+Everything below is committed, `make lean-check` green, axiom-clean
+(`[propext, Classical.choice, Quot.sound]` or smaller).
+
+Header / write-pixel / preamble / geometry (earlier sessions):
+`ni_tga_header_exs`, `ni_tga_write_pixel_exs`, `ni_tga_write_pixel_stmt_exs`,
+`ni_tga_decode_preamble` (+ `_frame` continuation form), `ni_tga_dst_compute`,
+`ni_tga_decode_wr_check`, `ni_tga_raw_read`, `ni_tga_pixel_step_rle/raw`,
+`ni_tga_pixel_suffix`, `tgaPixelOut_raw`, `tgaFoldI(_length/_raw_eq)`,
+`tgaFoldRaw(_length)`, `load_ptr_congr`.
+
+Loop0 (inner packet loop) - complete:
+`ni_tga_loop0_step_rle`, `ni_tga_loop0_rle`, `ni_tga_loop0_step_raw`,
+`ni_tga_loop0_raw`.
+
+**Uncompressed path (rle = 0) — PROVEN END TO END through loop1 and top level:**
+- loop1 prologue/step/fuel induction: `ni_tga_l1pre_rle0`, `ni_tga_l1step_rle0`,
+  `ni_tga_loop1_rle` (chains the step over npx-p0 via `tgaFoldI_raw_eq`).
+- spec side: `tgaWritesAux_rle0_pkt`, `tgaWritesAux_rle0_walk`,
+  `tgaFoldRaw_eq_materialize` (machine buffer = materialised spec writes).
+- composition: `ni_tga_loop1_rle_ok`, and top level
+  `ni_tga_decode_into_ok_rle0` (preamble + loop1 + ret 0 -> tgaPixels).
+- **Bug fixed**: `tgaDecodePre`/preamble used `.int i32 0` (signed) where Gen
+  uses `.int ⟨32,false⟩ 0`; corrected, frame body now `rfl`-equal to Gen's body.
+
+**Compressed path (rle != 0) — components done, joint loop1 induction pending:**
+- post-header state: `ni_tga_l1posthdr`.
+- packet prologues: `ni_tga_l1pre_rle_bytes`, `ni_tga_l1pre_rle_raw`.
+- packet steps: `ni_tga_l1step_rle_pkt`, `ni_tga_l1step_raw_pkt`.
+- spec per-packet steps: `tgaWritesAux_rle_pkt`, `tgaWritesAux_raw_pkt`
+  (plus `tgaHawStep`, `foldlM_*`, `tgaMaterialize_rle/raw`).
+- spec bounds inversions: `tgaWritesAux_ok_off`, `tgaWritesAux_ok_cnt`.
+- spec well-formedness: `TgaOkW` (fuel-indexed) and
+  `tgaWritesAux_ok_of_TgaOkW` (TgaOkW => tgaWritesAux succeeds).
+- `tgaPixelOut_ext` (channels-only dependence).
+
+**Remaining: `ni_tga_loop1_rne` (compressed loop1 fuel induction).**
+Approach worked out but not yet closed; the measure must be fuel `k` (a packet
+consumes `count` pixels but one fuel step), invariant per iteration:
+`npx - pidx = k`, `TgaL1Inv s ... pidx off`, `obl = tgaMaterialize ws`,
+`TgaOkW dat h k (npx - pidx) off`. Each step dispatches on `byteAt dat off &&& 0x80`:
+- RLE run: `ni_tga_l1step_rle_pkt` + `tgaWritesAux_rle_pkt`, recurse with
+  `k-1`, pixels `pidx+count`, off `off+1+ch`, buffer via `tgaMaterialize_rle`.
+- raw: `ni_tga_l1step_raw_pkt` + `tgaWritesAux_raw_pkt`, off `off+1+count*ch`,
+  buffer via `tgaMaterialize_raw`.
+The open difficulty is only the buffer-reconciliation rewrite direction
+(`tgaFoldI (tgaMaterialize ws) = tgaMaterialize (ws ++ map)`), a
+definitional/rewrite-shape issue in the `ih` call, not a mathematical gap.
+WIP file: `/tmp/loop1_rne_wip.lean` (close to compiling; 2 remaining
+type-mismatch errors in the RLE branch's `ih` call).
+
 ## Immediate next work (M1-M4)
 
 1. **M1 `ni_tga_header_exs`**: staged refinement like BMP header but simpler (no geometry sign/INT_MIN split). Export info-block predicate/constructor for composition.
