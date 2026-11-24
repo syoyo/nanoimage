@@ -52,4 +52,5 @@ import NANO.C.Proofs.NiTgaHeaderExs
 import NANO.C.Proofs.NiTgaDecode
 import NANO.C.Proofs.NiTgaLoad
 import NANO.C.Proofs.NiTgaLoadFields
+import NANO.C.Proofs.NiTgaLoadCompose
 

@@ -75,31 +75,27 @@ Loop0 (inner packet loop) - complete:
   data bounds from `TgaOkW` via `TgaOkW_rle0_dbnd`. Precondition: `TgaOkW` over
   the initial walk (all packet reads in bounds), plus the buffer/pixel bounds.
 
-**M4 (composed load `ni_load_tga` -> `tgaDecode`) — infrastructure started.**
-`NANO/C/Proofs/NiTgaLoad.lean` has the reusable byte-level helpers:
-`readBytes_some`, `load_int_some`, `slice_mid`, `decodeLE_enc1/4/8`.
-Still to do:
-1. Seven `tgaHeaderBlock_load<off>` facts reading width/height/channels/rle/
-   origins/dataOffset back out of the `ni_tga_info` block the header writes.
-   NOTE: proving these by `ac_rfl`/`simp [tgaHeaderBlock, List.append_assoc]`
-   over the concatenated block hits elaboration timeouts (200k heartbeats, and
-   400s+ for the batch) in this environment — a performance wall, not a
-   correctness gap. A cheaper route is needed (e.g. byte-level `byteAt` lemmas
-   on `encodeLE`, or hand-rolled `List.drop_left`/`take_left` steps avoiding
-   `ac_rfl`): `unfold tgaHeaderBlock; rw [List.append_assoc] …; rfl` per field.
-2. Compose the shell sequence `.call 21` (header, via `ni_tga_header_exs`) then
-   error check then `.call 23` (decode, via `ni_tga_decode_into_ok_exs`), exactly
-   like `NiBmpLoad.lean`'s `ni_bmp_load_exs`; on header failure return the
-   header error leaving the output untouched. The decode precondition `TgaOkW`
-   and the pixel/buffer bounds come from the input (analogous to BMP's
-   `hokPix`/`hcap`).
+**M4 (composed load `ni_load_tga` -> `tgaDecode`) — DONE.**
+1. `NANO/C/Proofs/NiTgaLoadFields.lean`: `tgaHeaderBlock_load{8,16,20,24,25,26,27}`
+   read width/height/channels/rle/origins/dataOffset back out of the info block
+   the header writes. The block is a *left*-nested `++` concatenation; the fast
+   route is a targeted
+   `simp only [tgaHeaderBlock, List.drop_append_of_le_length,
+     List.take_append_of_le_length, List.length_append, encodeLE_length,
+     List.drop_eq_nil_of_le, Nat.reduceLeDiff, Nat.sub_self, List.nil_append]`
+   closed by `List.take_of_length_le (by simp [encodeLE_length])`. Do NOT use
+   `ac_rfl`/`congr 2` over the large term (they diverge); follow the slice with a
+   direct `rw [decodeLE_enc…]`.
+2. `NANO/C/Proofs/NiTgaLoadCompose.lean`: `ni_tga_load_exs` composes the shell
+   `.call 21` (header) -> `ite` error check -> `.call 23` (decode) -> `.ret`,
+   mirroring `ni_bmp_load_exs`. Conclusion: `tgaPixels d h = .ok p ∧
+   s'.mem bo = some p`, i.e. the settled buffer is the TGA spec.
 
-## Immediate next work (M1-M4)
+## Immediate next work
 
-1. **M1 `ni_tga_header_exs`**: staged refinement like BMP header but simpler (no geometry sign/INT_MIN split). Export info-block predicate/constructor for composition.
-2. **M2 `ni_tga_write_pixel_exs`**: per-channel store proof (1/3/4), statement-call-friendly wrapper; bad channels return 0, no writes.
-3. **M3 decode loops + `ni_tga_decode_into_ok_exs`**: bridge `tgaMaterialize` write-list/List.set spec to in-place buffer early. Inner loop over packet pixels; outer loop induction over remaining pixels (`n_pixels - pixel_index`).
-4. **M4 `ni_tga_load_exs`**: compose header fid21 then decode fid23; update VERIFICATION/resume; close Phase 3.
+Phase 3 TGA is complete: header (M1), write-pixel (M2), decode loops (M3),
+unified decode theorem and composed load (M4) all proven. Nothing outstanding
+on the TGA path.
 
 ## Key constraints
 
