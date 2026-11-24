@@ -68,15 +68,31 @@ Loop0 (inner packet loop) - complete:
 - helper lemmas in `TgaLoop1Rle`: `tgaPixelOut_congr`, `tgaPixelOut_byteAt_eq`,
   `tgaPixelOut_raw_byteAt_eq`.
 
-**Both decode top-level theorems now exist**: `ni_tga_decode_into_ok_rle0`
-(uncompressed) and `ni_tga_decode_into_ok_rne` (compressed). A single
-mode-dispatching `ni_tga_decode_into_ok_exs` combining them is the next small
-step (each branch takes its own data-bound hypotheses; rle0 needs per-offset
-`hdbnd`/`hdob` which `TgaOkW` does not directly yield for the single byte read).
+**Decode is fully proven for both modes**, and unified:
+- `ni_tga_decode_into_ok_rle0` (uncompressed), `ni_tga_decode_into_ok_rne`
+  (compressed), and the mode-dispatching
+  `ni_tga_decode_into_ok_exs` (both). The rle=0 branch derives its per-pixel
+  data bounds from `TgaOkW` via `TgaOkW_rle0_dbnd`. Precondition: `TgaOkW` over
+  the initial walk (all packet reads in bounds), plus the buffer/pixel bounds.
 
-**Remaining for the full TGA goal:** unified top-level `ni_tga_decode_into_ok_exs`,
-then **M4** `ni_load_tga` -> `tgaDecode` (compose header fid21 + decode fid23 and
-handle the error/tag path).
+**M4 (composed load `ni_load_tga` -> `tgaDecode`) — infrastructure started.**
+`NANO/C/Proofs/NiTgaLoad.lean` has the reusable byte-level helpers:
+`readBytes_some`, `load_int_some`, `slice_mid`, `decodeLE_enc1/4/8`.
+Still to do:
+1. Seven `tgaHeaderBlock_load<off>` facts reading width/height/channels/rle/
+   origins/dataOffset back out of the `ni_tga_info` block the header writes.
+   NOTE: proving these by `ac_rfl`/`simp [tgaHeaderBlock, List.append_assoc]`
+   over the concatenated block hits elaboration timeouts (200k heartbeats, and
+   400s+ for the batch) in this environment — a performance wall, not a
+   correctness gap. A cheaper route is needed (e.g. byte-level `byteAt` lemmas
+   on `encodeLE`, or hand-rolled `List.drop_left`/`take_left` steps avoiding
+   `ac_rfl`): `unfold tgaHeaderBlock; rw [List.append_assoc] …; rfl` per field.
+2. Compose the shell sequence `.call 21` (header, via `ni_tga_header_exs`) then
+   error check then `.call 23` (decode, via `ni_tga_decode_into_ok_exs`), exactly
+   like `NiBmpLoad.lean`'s `ni_bmp_load_exs`; on header failure return the
+   header error leaving the output untouched. The decode precondition `TgaOkW`
+   and the pixel/buffer bounds come from the input (analogous to BMP's
+   `hokPix`/`hcap`).
 
 ## Immediate next work (M1-M4)
 
