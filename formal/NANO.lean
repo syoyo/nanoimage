@@ -51,4 +51,5 @@ import NANO.C.Proofs.NiTgaHeaderOut
 import NANO.C.Proofs.NiTgaHeaderExs
 import NANO.C.Proofs.NiTgaDecode
 import NANO.C.Proofs.NiTgaLoad
+import NANO.C.Proofs.NiTgaLoadFields
 
